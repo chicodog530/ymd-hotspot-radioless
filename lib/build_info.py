@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 DEFAULT_OUT = Path("/etc/ywd-hotspot/build-info.json")
+CHANNEL_FILE = Path("/etc/ywd-hotspot/update-channel")
 REPOSITORY = "https://github.com/merberg-ai/ywd-hotspot"
 
 
@@ -26,6 +27,21 @@ def run_git(source: Path, *args: str) -> str:
         return p.stdout.strip() if p.returncode == 0 else ""
     except Exception:
         return ""
+
+
+def read_channel(branch: str) -> str:
+    env = os.environ.get("YWD_UPDATE_CHANNEL", "").strip()
+    if env:
+        return env
+    try:
+        value = CHANNEL_FILE.read_text(encoding="utf-8").strip()
+        if value:
+            return value
+    except Exception:
+        pass
+    if branch in {"main", "dev"}:
+        return branch
+    return "main"
 
 
 def discover(source: Path) -> dict:
@@ -65,6 +81,7 @@ def discover(source: Path) -> dict:
         "commit_date": commit_date,
         "source": source_type,
         "source_state": source_state,
+        "update_channel": read_channel(branch),
         "installed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
 

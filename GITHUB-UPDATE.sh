@@ -5,8 +5,10 @@ umask 027
 REPO_URL="https://github.com/merberg-ai/ywd-hotspot.git"
 REPO_DIR="/opt/ywd-hotspot/repo"
 BUILD_INFO="/etc/ywd-hotspot/build-info.json"
+CHANNEL_FILE="/etc/ywd-hotspot/update-channel"
 MODE="update"
 BRANCH="main"
+BRANCH_EXPLICIT=0
 TAG=""
 
 if [[ $EUID -ne 0 ]]; then exec sudo bash "$0" "$@"; fi
@@ -17,8 +19,11 @@ Usage: GITHUB-UPDATE.sh [--check|--dry-run] [--branch NAME|--tag TAG]
 
   --check       Fetch metadata and report whether an update is available.
   --dry-run     Fetch and validate the candidate without changing the live install.
-  --branch NAME Update from a branch (default: main).
-  --tag TAG     Update to a specific tag instead of a branch.
+  --branch NAME Update from a branch. A successful main/dev update becomes the saved channel.
+  --tag TAG     Update to a specific tag without changing the saved update channel.
+
+With no --branch/--tag, the saved update channel is used. If no channel file
+exists yet, the current managed-checkout branch is used, then main as fallback.
 EOF
 }
 
@@ -26,7 +31,7 @@ while (($#)); do
   case "$1" in
     --check) MODE="check";;
     --dry-run) MODE="dry-run";;
-    --branch) shift; BRANCH="${1:-}"; [[ -n "$BRANCH" ]] || { echo "[FAIL] --branch requires a name"; exit 2; }; TAG="";;
+    --branch) shift; BRANCH="${1:-}"; [[ -n "$BRANCH" ]] || { echo "[FAIL] --branch requires a name"; exit 2; }; BRANCH_EXPLICIT=1; TAG="";;
     --tag) shift; TAG="${1:-}"; [[ -n "$TAG" ]] || { echo "[FAIL] --tag requires a tag"; exit 2; };;
     -h|--help) usage; exit 0;;
     *) echo "[FAIL] Unknown argument: $1"; usage; exit 2;;
@@ -61,6 +66,18 @@ if [[ -n "$(git -C "$REPO_DIR" status --porcelain 2>/dev/null)" ]]; then
   exit 1
 fi
 
+saved_channel=""
+if [[ -r "$CHANNEL_FILE" ]]; then
+  saved_channel="$(tr -d '[:space:]' < "$CHANNEL_FILE" 2>/dev/null || true)"
+  case "$saved_channel" in main|dev) ;; *) saved_channel="";; esac
+fi
+checkout_branch="$(git -C "$REPO_DIR" branch --show-current 2>/dev/null || true)"
+case "$checkout_branch" in main|dev) ;; *) checkout_branch="";; esac
+if [[ -z "$TAG" && "$BRANCH_EXPLICIT" == 0 ]]; then
+  BRANCH="${saved_channel:-${checkout_branch:-main}}"
+fi
+channel_display="${saved_channel:-${checkout_branch:-main}}"
+
 echo "Fetching YWD-Hotspot from GitHub while the live hotspot remains running..."
 git -C "$REPO_DIR" fetch --quiet --prune --tags origin
 
@@ -93,6 +110,7 @@ Installed : $installed_version
 Commit    : $installed_short
 Target    : ${target_version:-unknown}
 Source    : $label @ $target_short
+Channel   : $channel_display
 Date      : $target_date
 EOF
 
@@ -139,11 +157,14 @@ read -r -p "Apply $target_version from $label @ $target_short? [y/N]: " answer
 [[ "$answer" =~ ^[Yy]$ ]] || { echo "Cancelled."; exit 0; }
 
 echo "Applying validated candidate. UPDATE.sh will preserve the current RF/service policy..."
+next_channel="$channel_display"
+[[ -z "$TAG" ]] && next_channel="$BRANCH"
 YWD_SOURCE_TYPE=github \
 YWD_SOURCE_STATE=clean \
 YWD_GIT_BRANCH="$label" \
 YWD_GIT_COMMIT="$target_sha" \
 YWD_GIT_COMMIT_DATE="$target_date" \
+YWD_UPDATE_CHANNEL="$next_channel" \
   bash "$stage/UPDATE.sh"
 
 # Move the managed source checkout only after the live update succeeds.
@@ -152,8 +173,17 @@ if [[ -n "$TAG" ]]; then
 else
   git -C "$REPO_DIR" checkout --quiet -B "$BRANCH" "$target_sha"
   git -C "$REPO_DIR" branch --set-upstream-to="origin/$BRANCH" "$BRANCH" >/dev/null 2>&1 || true
+  if [[ "$BRANCH" == "main" || "$BRANCH" == "dev" ]]; then
+    tmp_channel="${CHANNEL_FILE}.tmp"
+    printf '%s\n' "$BRANCH" > "$tmp_channel"
+    chmod 0644 "$tmp_channel"
+    chown root:root "$tmp_channel" 2>/dev/null || true
+    mv -f "$tmp_channel" "$CHANNEL_FILE"
+    channel_display="$BRANCH"
+  fi
 fi
 
 echo
 echo "GitHub source checkout updated successfully."
+echo "Update channel: $channel_display"
 /usr/local/sbin/ywd-hotspotctl source 2>/dev/null || true

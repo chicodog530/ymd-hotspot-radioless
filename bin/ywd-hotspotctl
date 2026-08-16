@@ -4,23 +4,44 @@ APP=/opt/ywd-hotspot/app
 CFG=/etc/ywd-hotspot/config.json
 ADMIN=/usr/local/libexec/ywd-hotspot-admin
 BUILD_INFO=/etc/ywd-hotspot/build-info.json
+UPDATE_CHANNEL=/etc/ywd-hotspot/update-channel
+CALIBRATION=/var/lib/ywd-hotspot/calibration.json
+CAL_BASELINE=/var/lib/ywd-hotspot/calibration-baseline.json
 
 # Canonical config and build provenance live under a deliberately protected
 # /etc/ywd-hotspot directory because the same directory contains reusable
-# credentials. Read-only CLI commands transparently elevate only when needed
-# instead of printing misleading Permission denied / unknown output.
+# credentials. Read-only CLI commands transparently elevate only when needed.
 if [[ $EUID -ne 0 ]]; then
   case "${1:-}" in
-    status|source)
-      if [[ ! -r "$CFG" || ! -r "$BUILD_INFO" ]]; then
+    status|source|calibration)
+      if [[ ! -r "$CFG" || ! -r "$BUILD_INFO" || ( "${1:-}" == calibration && ! -r "$CALIBRATION" ) ]]; then
         echo "YWD-Hotspot protected metadata requires sudo; elevating this read-only command..." >&2
         exec sudo "$0" "$@"
       fi
+      ;;
+    update-channel)
+      exec sudo "$0" "$@"
       ;;
   esac
 fi
 
 need_root(){ [[ $EUID -eq 0 ]] || { echo "Run with sudo: sudo ywd-hotspotctl $*"; exit 1; }; }
+
+channel_value(){
+  local c=""
+  [[ -r "$UPDATE_CHANNEL" ]] && c="$(tr -d '[:space:]' < "$UPDATE_CHANNEL" 2>/dev/null || true)"
+  case "$c" in main|dev) printf '%s\n' "$c"; return;; esac
+  if [[ -r "$BUILD_INFO" ]]; then
+    c="$(python3 - "$BUILD_INFO" <<'PY'
+import json,sys
+try: print(json.load(open(sys.argv[1])).get('update_channel',''))
+except Exception: print('')
+PY
+)"
+    case "$c" in main|dev) printf '%s\n' "$c"; return;; esac
+  fi
+  printf 'main\n'
+}
 
 status(){
   echo "YWD Hotspot $(cat "$APP/VERSION" 2>/dev/null || echo unknown)"
@@ -30,8 +51,7 @@ status(){
   printf "%-18s %s\n" "Activity" "$(systemctl is-active ywd-activity.service 2>/dev/null || true)"
   printf "%-18s %s\n" "OLED" "$(systemctl is-active ywd-oled.service 2>/dev/null || true)"
   python3 - <<'PY'
-import json,hashlib
-from pathlib import Path
+import json
 try:
  c=json.load(open('/etc/ywd-hotspot/config.json')); s=c['station']; r=c['radio']; b=c['brandmeister']; w=c['web']; m=c.get('maintenance',{})
  print(f"{'Callsign':18} {s.get('callsign','?')}")
@@ -57,6 +77,7 @@ branch=d.get('branch','unknown'); commit=d.get('commit_short') or str(d.get('com
 print(f"{'Git source':18} {branch} @ {commit}")
 PY2
   fi
+  printf "%-18s %s\n" "Update channel" "$(channel_value)"
   if [[ -r /var/lib/ywd-hotspot/applied-state.json ]]; then
     python3 - <<'PY'
 import json,sys
@@ -68,7 +89,8 @@ PY
 }
 
 source_info(){
-  python3 - "$BUILD_INFO" <<'PY2'
+  local channel="$(channel_value)"
+  python3 - "$BUILD_INFO" "$channel" <<'PY2'
 import json,sys
 try: d=json.load(open(sys.argv[1]))
 except Exception: d={}
@@ -79,12 +101,43 @@ print(f"  Branch     : {d.get('branch','unknown')}")
 print(f"  Commit     : {d.get('commit','unknown')}")
 print(f"  Commit date: {d.get('commit_date','unknown')}")
 print(f"  State      : {d.get('source_state','unknown')}")
+print(f"  Channel    : {sys.argv[2]}")
 print(f"  Installed  : {d.get('version','unknown')}")
 PY2
 }
 
-github_update(){ need_root update; exec "$APP/GITHUB-UPDATE.sh" "$@"; }
-migrate_github(){ need_root migrate-github; exec "$APP/MIGRATE-TO-GITHUB.sh" "$@"; }
+update_channel(){
+  need_root update-channel
+  local requested="${1:-}"
+  if [[ -z "$requested" ]]; then
+    echo "Update channel: $(channel_value)"
+    echo "Available channels: main dev"
+    return 0
+  fi
+  case "$requested" in main|dev) ;; *) echo "[FAIL] update channel must be 'main' or 'dev'"; return 2;; esac
+  local tmp="${UPDATE_CHANNEL}.tmp"
+  printf '%s\n' "$requested" > "$tmp"
+  chmod 0644 "$tmp"
+  chown root:root "$tmp" 2>/dev/null || true
+  mv -f "$tmp" "$UPDATE_CHANNEL"
+  python3 - "$BUILD_INFO" "$requested" <<'PY'
+import json,os,sys
+from pathlib import Path
+p=Path(sys.argv[1]); channel=sys.argv[2]
+try: d=json.loads(p.read_text())
+except Exception: d={}
+d['update_channel']=channel
+t=p.with_suffix(p.suffix+'.tmp'); t.write_text(json.dumps(d,indent=2)+'\n'); os.chmod(t,0o644)
+try: os.chown(t,0,0)
+except Exception: pass
+os.replace(t,p)
+PY
+  echo "YWD-Hotspot update channel set to: $requested"
+  echo "Future 'sudo ywd-hotspotctl update' commands will follow $requested."
+}
+
+github_update(){ need_root update; exec bash "$APP/GITHUB-UPDATE.sh" "$@"; }
+migrate_github(){ need_root migrate-github; exec bash "$APP/MIGRATE-TO-GITHUB.sh" "$@"; }
 
 logs(){ echo "=== MMDVM-Host ==="; journalctl -u ywd-mmdvmhost.service -n 100 --no-pager -o cat; echo; echo "=== DMRGateway ==="; journalctl -u ywd-dmrgateway.service -n 100 --no-pager -o cat; echo; echo "=== Dashboard ==="; journalctl -u ywd-dashboard.service -n 60 --no-pager -o cat; }
 
@@ -100,6 +153,65 @@ for x in rows[:30]:
  dur='—' if x.get('duration_s') is None else f"{x['duration_s']:.1f}s"; ber='—' if x.get('ber_pct') is None else f"{x['ber_pct']:.1f}%"
  q=f"loss {x['packet_loss_pct']:.0f}%" if x.get('packet_loss_pct') is not None else (f"{x['rssi_dbm']} dBm" if x.get('rssi_dbm') is not None else '—')
  print(f"{x.get('path','?'):8} {str(x.get('slot','?')):4} {src[:12]:12} {dst[:16]:16} {dur:7} {ber:7} {q}")
+PY
+}
+
+calibration(){
+  local sub="${1:-summary}" fmt="${2:-json}"
+  python3 - "$sub" "$fmt" <<'PY'
+import csv,json,sys,time
+from collections import defaultdict
+from pathlib import Path
+sub=sys.argv[1]; fmt=sys.argv[2]
+def read(path, default):
+ try: return json.loads(Path(path).read_text())
+ except Exception: return default
+doc=read('/var/lib/ywd-hotspot/calibration.json',{'tests':[]})
+tests=[x for x in doc.get('tests',[]) if isinstance(x,dict) and x.get('ber_pct') is not None]
+base=read('/var/lib/ywd-hotspot/calibration-baseline.json',None)
+cfg=read('/etc/ywd-hotspot/config.json',{})
+g=defaultdict(list)
+for x in tests:
+ try: g[int(x.get('rx_offset',0))].append(x)
+ except Exception: pass
+aggs=[]
+for off,rows in sorted(g.items()):
+ bers=[float(x['ber_pct']) for x in rows]
+ rss=[float(x['rssi_dbm']) for x in rows if x.get('rssi_dbm') is not None]
+ aggs.append({'rx_offset':off,'samples':len(rows),'avg_ber':round(sum(bers)/len(bers),3),'best_ber':round(min(bers),3),'avg_rssi':round(sum(rss)/len(rss),1) if rss else None})
+ready=[x for x in aggs if x['samples']>=3]
+best=min(ready,key=lambda x:(x['avg_ber'],-x['samples'],abs(x['rx_offset']))) if ready else None
+provisional=min(aggs,key=lambda x:(x['avg_ber'],-x['samples'],abs(x['rx_offset']))) if aggs else None
+if sub in ('summary','status'):
+ print('YWD-Hotspot RX calibration')
+ print(f"  Current RX offset : {cfg.get('radio',{}).get('rx_offset','?')} Hz")
+ started=doc.get('session_started_at')
+ if isinstance(started,(int,float)):
+  print('  Session started   : '+time.strftime('%Y-%m-%d %H:%M:%S %Z',time.localtime(started)))
+ else: print(f"  Session started   : {started or 'not started'}")
+ print(f"  Baseline          : {'saved' if base else 'not saved'}")
+ print(f"  Samples           : {len(tests)} across {len(aggs)} offset(s)")
+ print('  Sample target     : 3 per offset before recommendation')
+ print()
+ print(f"{'RX OFFSET':>10}  {'N':>3}  {'AVG BER':>8}  {'BEST BER':>9}  {'AVG RSSI':>9}")
+ for a in aggs:
+  mark='*' if best and a['rx_offset']==best['rx_offset'] else ' '
+  rssi='—' if a['avg_rssi'] is None else f"{a['avg_rssi']:.1f}"
+  print(f"{mark}{a['rx_offset']:>9}  {a['samples']:>3}  {a['avg_ber']:>7.3f}%  {a['best_ber']:>8.3f}%  {rssi:>9}")
+ print()
+ if best: print(f"Recommended RX offset: {best['rx_offset']} Hz ({best['samples']} samples, {best['avg_ber']:.3f}% average BER)")
+ elif provisional: print(f"Provisional best: {provisional['rx_offset']} Hz ({provisional['samples']}/3 samples, {provisional['avg_ber']:.3f}% average BER)")
+ else: print('No RF calibration samples recorded yet.')
+ raise SystemExit(0)
+if sub != 'export':
+ raise SystemExit("Usage: ywd-hotspotctl calibration [summary|export json|export csv]")
+if fmt == 'json':
+ print(json.dumps({'session_started_at':doc.get('session_started_at'),'sample_target':3,'baseline':base,'samples':tests,'aggregates':aggs,'recommended':best,'provisional':provisional},indent=2))
+elif fmt == 'csv':
+ w=csv.writer(sys.stdout); w.writerow(['time','rx_offset_hz','ber_pct','rssi_dbm','duration_s','source','destination'])
+ for x in tests: w.writerow([x.get('time',''),x.get('rx_offset',''),x.get('ber_pct',''),x.get('rssi_dbm',''),x.get('duration_s',''),x.get('source',''),x.get('destination','')])
+else:
+ raise SystemExit('export format must be json or csv')
 PY
 }
 
@@ -132,7 +244,7 @@ update_ids(){ need_root update-ids; python3 "$APP/lib/id-update.py" --force; }
 
 bm(){ local cmd="${1:-profile}"; shift || true; need_root bm; case "$cmd" in profile) python3 "$APP/lib/brandmeister.py" profile;; dropqso) python3 "$APP/lib/brandmeister.py" dropqso 0;; dropdyn) python3 "$APP/lib/brandmeister.py" dropdyn 0;; addtg) [[ "${1:-}" =~ ^[0-9]+$ ]] || { echo "Usage: bm addtg TG"; return 2; }; python3 "$APP/lib/brandmeister.py" addtg "$1" 0;; deltg) [[ "${1:-}" =~ ^[0-9]+$ ]] || { echo "Usage: bm deltg TG"; return 2; }; python3 "$APP/lib/brandmeister.py" deltg "$1" 0;; *) echo "Usage: bm {profile|dropqso|dropdyn|addtg TG|deltg TG}"; return 2;; esac; }
 
-menu(){ while true; do clear; echo "========================================"; echo " YWD Hotspot Control - Alpha6"; echo "========================================"; cat <<'EOF'
+menu(){ while true; do clear; echo "========================================"; echo " YWD Hotspot Control - Alpha7 dev"; echo "========================================"; cat <<'EOF'
  1) Status                 9) Stop/disable RF
  2) Last Heard            10) Configure BM API key
  3) Logs                  11) Configure web password
@@ -141,13 +253,13 @@ menu(){ while true; do clear; echo "========================================"; e
  6) Apply saved config    14) Drop all dynamic TGs
  7) Health                15) Create diagnostic bundle
  8) Start/enable RF       16) Config history
-17) Hardware Lab
-18) Source/build info
-19) Check GitHub update
-20) Update from GitHub
+17) Hardware Lab          21) Calibration summary
+18) Source/build info     22) Show update channel
+19) Check GitHub update   23) Set channel to dev
+20) Update from GitHub    24) Set channel to main
  0) Exit
 EOF
- read -r -p "Select: " n; case "$n" in 1)status;;2)lastheard;;3)logs;;4)restart_running;;5)configure;;6)apply_config;;7)health;;8)start_rf;;9)stop_rf;;10)bm_api_key;;11)web_password;;12)update_ids;;13)bm dropqso;;14)bm dropdyn;;15)diagnostics;;16)history;;17)lab;continue;;18)source_info;;19)github_update --check;continue;;20)github_update;continue;;0)return;;esac; read -r -p "Enter..." _; done; }
+ read -r -p "Select: " n; case "$n" in 1)status;;2)lastheard;;3)logs;;4)restart_running;;5)configure;;6)apply_config;;7)health;;8)start_rf;;9)stop_rf;;10)bm_api_key;;11)web_password;;12)update_ids;;13)bm dropqso;;14)bm dropdyn;;15)diagnostics;;16)history;;17)lab;continue;;18)source_info;;19)github_update --check;continue;;20)github_update;continue;;21)calibration;;22)update_channel;;23)update_channel dev;;24)update_channel main;;0)return;;esac; read -r -p "Enter..." _; done; }
 
 cmd="${1:-menu}"; shift || true
-case "$cmd" in status)status;; source)source_info;; update)github_update "$@";; migrate-github)migrate_github "$@";; logs)logs;; lastheard)lastheard;; restart)restart_running;; configure)configure;; apply)apply_config;; health)health;; diagnostics)diagnostics;; history)history;; lab)lab;; backup)backup;; start)start_rf;; stop)stop_rf;; bm-api-key)bm_api_key;; web-password)web_password;; update-ids)update_ids;; bm)bm "$@";; version)cat "$APP/VERSION";; menu|"")menu;; *) echo "Usage: ywd-hotspotctl {status|source|update|migrate-github|logs|lastheard|restart|configure|apply|health|diagnostics|history|lab|backup|start|stop|bm-api-key|web-password|update-ids|bm|version}"; exit 2;; esac
+case "$cmd" in status)status;; source)source_info;; update)github_update "$@";; update-channel)update_channel "$@";; calibration)calibration "$@";; migrate-github)migrate_github "$@";; logs)logs;; lastheard)lastheard;; restart)restart_running;; configure)configure;; apply)apply_config;; health)health;; diagnostics)diagnostics;; history)history;; lab)lab;; backup)backup;; start)start_rf;; stop)stop_rf;; bm-api-key)bm_api_key;; web-password)web_password;; update-ids)update_ids;; bm)bm "$@";; version)cat "$APP/VERSION";; menu|"")menu;; *) echo "Usage: ywd-hotspotctl {status|source|update|update-channel|calibration|migrate-github|logs|lastheard|restart|configure|apply|health|diagnostics|history|lab|backup|start|stop|bm-api-key|web-password|update-ids|bm|version}"; exit 2;; esac
