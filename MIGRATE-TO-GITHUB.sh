@@ -6,7 +6,7 @@ REPO_URL="https://github.com/merberg-ai/ywd-hotspot.git"
 REPO_DIR="/opt/ywd-hotspot/repo"
 BRANCH="main"
 
-if [[ $EUID -ne 0 ]]; then exec sudo "$0" "$@"; fi
+if [[ $EUID -ne 0 ]]; then exec sudo bash "$0" "$@"; fi
 
 cat <<'EOF'
 ============================================================
@@ -33,8 +33,6 @@ if [[ -d "$REPO_DIR/.git" ]]; then
     "$REPO_URL"|"https://github.com/merberg-ai/ywd-hotspot"|"git@github.com:merberg-ai/ywd-hotspot.git") ;;
     *) echo "[FAIL] Existing $REPO_DIR uses unexpected origin '$origin'."; exit 1;;
   esac
-  [[ -z "$(git -C "$REPO_DIR" status --porcelain)" ]] || { echo "[FAIL] Existing managed checkout has local changes."; git -C "$REPO_DIR" status --short; exit 1; }
-  echo "Refreshing existing managed checkout..."
 else
   if [[ -e "$REPO_DIR" ]]; then
     echo "[FAIL] $REPO_DIR exists but is not a Git repository. Move it aside and retry."
@@ -45,11 +43,19 @@ else
   git clone --quiet --branch "$BRANCH" "$REPO_URL" "$REPO_DIR"
 fi
 
-chmod 0755 "$REPO_DIR"/INSTALL.sh "$REPO_DIR"/UPDATE.sh "$REPO_DIR"/UNINSTALL.sh \
-  "$REPO_DIR"/GITHUB-UPDATE.sh "$REPO_DIR"/MIGRATE-TO-GITHUB.sh "$REPO_DIR"/bin/ywd-hotspotctl "$REPO_DIR"/lab/mmdvm-diag.sh
-chmod 0755 "$REPO_DIR"/lib/*.py
+# The managed checkout is source state, not the deployed runtime. Do not chmod
+# files inside it: changing tracked executable bits makes Git report a dirty
+# tree. Content modifications are still detected; mode-only drift is ignored.
+git -C "$REPO_DIR" config core.fileMode false
 
-"$REPO_DIR/GITHUB-UPDATE.sh" --branch "$BRANCH"
+if [[ -n "$(git -C "$REPO_DIR" status --porcelain)" ]]; then
+  echo "[FAIL] Existing managed checkout has local content changes."
+  git -C "$REPO_DIR" status --short
+  exit 1
+fi
+
+echo "Refreshing/validating managed checkout..."
+bash "$REPO_DIR/GITHUB-UPDATE.sh" --branch "$BRANCH"
 
 echo
 cat <<'EOF'

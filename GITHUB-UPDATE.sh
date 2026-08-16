@@ -9,7 +9,7 @@ MODE="update"
 BRANCH="main"
 TAG=""
 
-if [[ $EUID -ne 0 ]]; then exec sudo "$0" "$@"; fi
+if [[ $EUID -ne 0 ]]; then exec sudo bash "$0" "$@"; fi
 
 usage(){
   cat <<'EOF'
@@ -52,8 +52,11 @@ case "$origin" in
   *) echo "[FAIL] Refusing update: unexpected origin '$origin'"; exit 1;;
 esac
 
+# The managed source tree should never be modified by installer/updater chmods.
+# Ignore executable-bit-only drift while continuing to refuse content changes.
+git -C "$REPO_DIR" config core.fileMode false
 if [[ -n "$(git -C "$REPO_DIR" status --porcelain 2>/dev/null)" ]]; then
-  echo "[FAIL] $REPO_DIR has local modifications. Refusing to overwrite them."
+  echo "[FAIL] $REPO_DIR has local content modifications. Refusing to overwrite them."
   git -C "$REPO_DIR" status --short
   exit 1
 fi
@@ -141,7 +144,7 @@ YWD_SOURCE_STATE=clean \
 YWD_GIT_BRANCH="$label" \
 YWD_GIT_COMMIT="$target_sha" \
 YWD_GIT_COMMIT_DATE="$target_date" \
-  "$stage/UPDATE.sh"
+  bash "$stage/UPDATE.sh"
 
 # Move the managed source checkout only after the live update succeeds.
 if [[ -n "$TAG" ]]; then
