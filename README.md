@@ -1,150 +1,169 @@
-# YWD-Hotspot 0.1.0-alpha5 — Calibration Prep + UI Polish
+<p align="center">
+  <img src="assets/branding/ywd-hotspot-badge-256.webp" alt="YWD-Hotspot logo" width="220">
+</p>
 
-Alpha5 builds directly on the known-good **0.1.0-alpha4.1 “Stability + Web Config”** checkpoint. It keeps the same pinned MMDVM-Host/DMRGateway RF path and schema 3 configuration. The goal of this release is to finish the UI/calibration-prep work before controlled RF calibration testing.
+# YWD-Hotspot
+
+**A lightweight DMR hotspot stack for Raspberry Pi + MMDVM HAT hardware.**
+
+YWD-Hotspot is a small, purpose-built alternative to a full hotspot distribution. It runs the RF path with pinned upstream **MMDVM-Host** and **DMRGateway**, then adds a lightweight local dashboard, activity collector, OLED support, diagnostics, BrandMeister controls, transactional configuration, and calibration tools without dragging a heavyweight web stack onto the Pi.
+
+> **Development status:** `0.1.0-alpha5` is currently under test. The last confirmed known-good checkpoint is `0.1.0-alpha4.1`. Alpha software can break; keep backups and do not expose the dashboard directly to the public Internet.
+
+## Primary target
+
+The current development and test target is:
+
+- Raspberry Pi Zero W Rev 1.1 (original Zero W, not Zero 2 W)
+- Raspberry Pi OS Lite 32-bit / Raspbian 13 (trixie)
+- Simplex MMDVM_HS_Hat / JumboSpot-style board
+- STM32 + ADF7021 modem hardware
+- `/dev/serial0` at 115200 baud
+- SSD1306-like 128x64 I2C OLED at `0x3C` when fitted
+- DMR simplex operation through BrandMeister
+
+Other Raspberry Pi models may work, but the original Pi Zero W is the performance and compatibility baseline for this project.
+
+## What it includes
+
+- Pinned MMDVM-Host and DMRGateway builds
+- DMR-only simplex configuration
+- BrandMeister connectivity and server-side API controls
+- Live **RX FROM RADIO** / **TX TO RADIO** activity
+- Last Heard with caller/TG, BER, RSSI and packet-loss information when available
+- RadioID callsign lookup with lightweight periodic updates
+- Transactional web configuration with validation, history and rollback
+- RF-safe start/stop/restart behavior
+- Local web-control password for write/admin actions
+- Approximate city/state or ZIP/postal location lookup
+- Calibration baseline + RX BER test session tools
+- Health, persistent journaling and sanitized diagnostic exports
+- Optional I2C OLED status display
+- Plain HTML/CSS/JS dashboard with no Node.js, database server, Docker, or frontend framework
+
+## Architecture
 
 ```text
-DMR radio <-> MMDVM HAT <-> MMDVM-Host <-> DMRGateway <-> BrandMeister
-                              |
-                    activity / OLED / web UI
+DMR HT
+  |
+  v
+MMDVM HAT
+  |
+  v
+MMDVM-Host
+  |
+  v
+DMRGateway
+  |
+  v
+BrandMeister
+
+Side services:
+  activity collector
+  dashboard
+  OLED
+  CLI/admin helper
 ```
 
-The dashboard remains outside the RF-critical path.
+The dashboard, OLED and activity presentation are intentionally outside the RF-critical path. If the dashboard dies, DMR should keep working.
 
-## Alpha5 highlights
+## Fresh install from GitHub
 
-### Live DMR animation
-
-The Status page now has a lightweight CSS-only RF visualization:
-
-- **RX FROM RADIO**: signal rings move inward toward the hotspot
-- **TX TO RADIO**: signal rings radiate outward
-- idle uses a subtle low-cost breathing state
-- `prefers-reduced-motion` is honored
-- no canvas, WebGL, animation framework, or extra runtime dependency
-
-### Collapsible Last Heard
-
-- Last Heard can be collapsed from its header.
-- The collapsed header still shows the newest caller/destination and age.
-- The collapsed/expanded preference is stored in browser local storage.
-
-### Approximate location lookup
-
-Settings can look up an approximate location from a **city/state or ZIP/postal code** and populate latitude/longitude.
-
-- lookup is user-triggered only; there is no autocomplete
-- up to five matches are shown
-- coordinates remain manually editable
-- the normal Location field is only auto-filled when it is blank/default
-- results are cached locally for 30 days (up to 40 queries)
-- public lookup uses OpenStreetMap Nominatim and shows `© OpenStreetMap contributors`
-- if lookup is unavailable, manual coordinates continue to work normally
-
-The lookup text is sent to the public geocoding service when the operator presses **LOOK UP**. City/ZIP-level searches are recommended; exact street addresses are unnecessary for this hotspot.
-
-### Unsaved Settings protection
-
-- Settings shows a visible **UNSAVED FORM EDITS** badge.
-- Leaving Settings prompts while edits are unsaved.
-- Browser reload/close uses the standard unsaved-changes warning.
-
-### Calibration baseline
-
-The CALIBRATE page adds a dedicated known-good RF baseline:
-
-- **SAVE CALIBRATION BASELINE** records the current radio/modem settings
-- **RESTORE BASELINE** restores only the radio section and applies it
-- baseline data is kept separately from ordinary config history
-- a pre-restore normal config snapshot is still created before restoration
-
-### Calibration sessions/results
-
-- **START NEW TEST** clears only the calibration result table; it does not alter RF settings.
-- Recorded RX tests include offset, BER, RSSI, duration, source and destination.
-- The lowest-BER observation is highlighted.
-- Duplicate recording of the exact same RF call at the same RX offset is rejected.
-- TX offset remains manual because the hotspot cannot measure BER at the receiving handheld.
-
-### Support summary
-
-Diagnostics adds **COPY SUPPORT SUMMARY**. It creates a compact sanitized text report containing:
-
-- build/version and uptime
-- service states
-- BrandMeister state/master
-- frequency, color code, offsets and levels
-- temperature/throttle/RAM/disk
-- Wi-Fi signal/error counters
-- config pending/applied state
-- calibration best/baseline state
-
-Hotspot Security password, BrandMeister API key and web-control password are never included.
-
-### Status/mobile polish
-
-- version + hostname + uptime are visible at the top and bottom of the UI
-- RF/BM/Wi-Fi/temperature strip has more useful hover/detail text
-- calibration, location results and control layouts received another phone-width pass
-
-## Security model
-
-Status remains readable without login. All writes—including location lookup, calibration baseline changes and runtime controls—require the local web-control password.
-
-The dashboard still runs as `ywd-hotspot`. Root operations are limited to the validated `/usr/local/libexec/ywd-hotspot-admin` actions listed in `/etc/sudoers.d/ywd-hotspot`.
-
-The dashboard is still plain HTTP. Keep it on a trusted LAN; do not expose its port directly to the public Internet.
-
-## Upgrade from Alpha4.1
-
-Alpha5's updater **does not compile MMDVM-Host or DMRGateway** and preserves the existing RF running/enabled state.
+Until the repository URL is finalized, replace `OWNER` below with the GitHub account or organization that owns the repository.
 
 ```bash
-cd ~/tmp
-tar -xzf ywd-hotspot-0.1.0-alpha5.tar.gz
-cd ywd-hotspot-0.1.0-alpha5
+sudo apt update
+sudo apt install -y git
+cd ~
+git clone https://github.com/OWNER/ywd-hotspot.git
+cd ywd-hotspot
+chmod +x INSTALL.sh UPDATE.sh UNINSTALL.sh bin/ywd-hotspotctl lab/mmdvm-diag.sh lib/*.py
+sudo ./INSTALL.sh
+```
+
+On an original Pi Zero W, YWD-Hotspot expects the PL011 UART to be available as:
+
+```text
+/dev/serial0 -> /dev/ttyAMA0
+```
+
+If the installer reports a UART problem, run:
+
+```bash
+sudo ./lab/mmdvm-diag.sh
+```
+
+Choose **option 5** to apply the recommended Pi Zero W PL011 configuration, reboot, return to the repository, and run `sudo ./INSTALL.sh` again.
+
+The installer:
+
+- verifies Raspberry Pi hardware and probes the MMDVM modem read-only
+- installs required Debian packages
+- creates the restricted `ywd-hotspot` service account
+- clones and builds the pinned upstream radio components using `make -j1`
+- installs the YWD-Hotspot services and CLI
+- runs the interactive configuration wizard
+- enables persistent crash journaling by default
+- starts dashboard/activity services
+- starts the OLED only when configured and detected
+- **does not start RF unless you explicitly type `ENABLE-RF`**
+
+A fresh build of MMDVM-Host and DMRGateway can take a while on an original Pi Zero W. That is normal.
+
+For the full install walkthrough, see [docs/INSTALL.md](docs/INSTALL.md).
+
+## After installation
+
+Check the appliance:
+
+```bash
+ywd-hotspotctl status
+```
+
+Set the local dashboard write-control password:
+
+```bash
+sudo ywd-hotspotctl web-password
+```
+
+If you want BrandMeister API features such as Drop QSO and static/dynamic talkgroup controls, set the API v2 key separately:
+
+```bash
+sudo ywd-hotspotctl bm-api-key
+```
+
+Then open:
+
+```text
+http://PI-IP:8080/
+```
+
+The dashboard port is configurable and may differ from `8080`.
+
+## Updating a Git clone
+
+```bash
+cd ~/ywd-hotspot
+git pull --ff-only
+chmod +x INSTALL.sh UPDATE.sh UNINSTALL.sh bin/ywd-hotspotctl lab/mmdvm-diag.sh lib/*.py
 sudo ./UPDATE.sh
 ```
 
-Then hard-refresh the dashboard.
+The Alpha5 updater creates a protected config backup first, does **not** rebuild MMDVM-Host or DMRGateway, and preserves whether the RF path was active/enabled before the update.
 
-No new credentials are required. The existing Hotspot Security password, BrandMeister API key and web-control password are preserved.
+See [docs/UPGRADING.md](docs/UPGRADING.md) before updating a working hotspot.
 
-## Pinned upstream radio components
-
-Unchanged from the known-good checkpoint:
-
-- MMDVM-Host: `dea6e9b2c35857fe6f904c5092bebadb86cbf079`
-- DMRGateway: `2a3306de313cf4c094c2031c9ced5a6858bbbfcc`
-
-## Key files
-
-```text
-/etc/ywd-hotspot/config.json                         canonical schema-3 config
-/etc/ywd-hotspot/MMDVM-Host.ini                      generated radio config
-/etc/ywd-hotspot/DMRGateway.ini                       generated gateway config
-/etc/ywd-hotspot/bm-api.key                           BrandMeister API key
-/etc/ywd-hotspot/web-auth.json                        web-control password hash
-
-/var/lib/ywd-hotspot/DMRIds.dat                       callsign lookup
-/var/lib/ywd-hotspot/lastheard.json                    DMR history
-/var/lib/ywd-hotspot/calibration.json                  current calibration session
-/var/lib/ywd-hotspot/calibration-baseline.json         safe baseline metadata
-/var/lib/ywd-hotspot/geocode-cache.json                approximate-location cache
-/var/lib/ywd-hotspot/config-history.json               safe config-history metadata
-/var/lib/ywd-hotspot/audit.json                        safe action audit
-/var/lib/ywd-hotspot/private/calibration-baseline.json protected calibration baseline
-/var/lib/ywd-hotspot/private/config-history/           protected rollback snapshots
-```
-
-## Main CLI commands
+## CLI
 
 ```bash
 ywd-hotspotctl status
 ywd-hotspotctl health
 ywd-hotspotctl lastheard
 ywd-hotspotctl logs
+sudo ywd-hotspotctl configure
 sudo ywd-hotspotctl apply
 sudo ywd-hotspotctl diagnostics
+sudo ywd-hotspotctl backup
 sudo ywd-hotspotctl restart
 sudo ywd-hotspotctl start
 sudo ywd-hotspotctl stop
@@ -152,15 +171,84 @@ sudo ywd-hotspotctl update-ids
 sudo ywd-hotspotctl lab
 ```
 
-## Alpha5 test goal
+Running `sudo ywd-hotspotctl` with no command opens the interactive control menu.
 
-After verifying the UI and location lookup, freeze feature work and begin controlled Parrot calibration:
+## Configuration and runtime data
 
-1. save a calibration baseline
-2. start a new test session
-3. keep HT position/power constant
-4. record BER at controlled RX offsets
-5. identify the lowest repeatable BER
-6. evaluate RX level only if offset calibration is insufficient
-7. treat TX calibration separately using evidence from the handheld/listening path
-8. restore the baseline at any time if testing gets weird
+Canonical configuration:
+
+```text
+/etc/ywd-hotspot/config.json
+```
+
+Generated radio configuration:
+
+```text
+/etc/ywd-hotspot/MMDVM-Host.ini
+/etc/ywd-hotspot/DMRGateway.ini
+```
+
+Runtime/history data is stored under:
+
+```text
+/var/lib/ywd-hotspot/
+```
+
+Protected configuration backups are stored under:
+
+```text
+/var/backups/ywd-hotspot/
+```
+
+Backups can contain credentials. Treat them as secrets.
+
+## Security
+
+The web dashboard is **plain HTTP** and is intended for a trusted LAN. Do not forward the dashboard port directly from the Internet.
+
+The following credentials are intentionally separate:
+
+- BrandMeister Hotspot Security password
+- BrandMeister API v2 key
+- local YWD-Hotspot web-control password
+
+The API key stays on the Pi and is not returned to browser JavaScript. Diagnostic/support exports are designed to redact reusable credentials.
+
+Read [SECURITY.md](SECURITY.md) before exposing, modifying, or publishing a deployment.
+
+## Pinned upstream radio components
+
+YWD-Hotspot currently pins:
+
+```text
+MMDVM-Host
+  repo   https://github.com/g4klx/MMDVM-Host.git
+  commit dea6e9b2c35857fe6f904c5092bebadb86cbf079
+
+DMRGateway
+  repo   https://github.com/g4klx/DMRGateway.git
+  commit 2a3306de313cf4c094c2031c9ced5a6858bbbfcc
+```
+
+Do not casually move these pins while calibration/stability testing is in progress.
+
+## Current development focus
+
+Alpha5 is the calibration-prep/UI-polish build. Once it is confirmed stable, feature work should freeze while controlled DMR calibration is performed. The first calibration target is **RXOffset using repeatable Parrot transmissions and measured BER**. TX calibration is a separate problem because the hotspot cannot directly measure the receiving handheld's BER.
+
+See [docs/CALIBRATION.md](docs/CALIBRATION.md).
+
+## Documentation
+
+- [Installation](docs/INSTALL.md)
+- [Upgrading](docs/UPGRADING.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Calibration](docs/CALIBRATION.md)
+- [GitHub repository setup](docs/GITHUB-SETUP.md)
+- [Security](SECURITY.md)
+- [Contributing](CONTRIBUTING.md)
+- [Changelog](CHANGELOG.md)
+
+## License
+
+A project license has not yet been selected. No `LICENSE` file is included in this repository-prep package; choose the intended license before treating the repository as an open-source distribution.

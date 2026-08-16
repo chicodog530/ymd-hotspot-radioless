@@ -1,0 +1,64 @@
+# Python bytecode / local environments
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+
+# Test/tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Build/package output
+build/
+dist/
+*.egg-info/
+*.tar.gz
+*.tgz
+*.zip
+*.SHA256
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local logs/diagnostics
+*.log
+mmdvm-diag-*.txt
+ywd-hotspot-diagnostics-*
+diagnostics/
+
+# Defensive ignores for accidentally copied live appliance state/secrets
+/config.json
+/MMDVM-Host.ini
+/DMRGateway.ini
+/bm-api.key
+/web-auth.json
+/lastheard.json
+/calibration.json
+/calibration-baseline.json
+/geocode-cache.json
+/config-history.json
+/audit.json
+/private/
+/backups/
+
+# Local scratch/patch files
+*.bak
+*.orig
+*.rej
+*.tmp
+scratch/
+tmp/

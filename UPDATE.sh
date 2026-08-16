@@ -48,8 +48,14 @@ install -d -m 0755 /opt/ywd-hotspot/app /usr/local/libexec
 install -d -o root -g ywd-hotspot -m 0750 /etc/ywd-hotspot
 install -d -o ywd-hotspot -g ywd-hotspot -m 0750 /var/lib/ywd-hotspot /var/lib/ywd-hotspot/diagnostics
 install -d -o root -g root -m 0700 /var/lib/ywd-hotspot/private /var/lib/ywd-hotspot/private/config-history
-rm -rf /opt/ywd-hotspot/app/*
-cp -a "$SELF/." /opt/ywd-hotspot/app/
+rm -rf /opt/ywd-hotspot/app
+install -d -m 0755 /opt/ywd-hotspot/app
+# Copy only appliance/runtime source. A Git checkout may contain a large .git
+# database plus repository docs/artwork that do not belong in /opt.
+for item in bin lib web systemd sudoers lab INSTALL.sh UPDATE.sh UNINSTALL.sh VERSION pins.env README.md MANIFEST.txt; do
+  cp -a "$SELF/$item" /opt/ywd-hotspot/app/
+done
+
 chmod +x /opt/ywd-hotspot/app/bin/ywd-hotspotctl /opt/ywd-hotspot/app/lib/*.py /opt/ywd-hotspot/app/lab/mmdvm-diag.sh
 install -m 0755 /opt/ywd-hotspot/app/bin/ywd-hotspotctl /usr/local/sbin/ywd-hotspotctl
 install -o root -g root -m 0755 /opt/ywd-hotspot/app/lib/admin.py /usr/local/libexec/ywd-hotspot-admin
