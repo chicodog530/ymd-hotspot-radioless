@@ -6,6 +6,20 @@ YWD-Hotspot is currently in alpha development. This changelog summarizes project
 
 **Status: current development/test build. Do not treat as known-good until separately confirmed.**
 
+### Migration hotfix — 2026-08-15
+
+The first Alpha6 GitHub-migration commit changed executable bits inside `/opt/ywd-hotspot/repo` after cloning it. Git correctly reported those mode changes as local modifications, so the safety check refused to continue.
+
+The hotfix:
+
+- stores executable mode on the repository shell/CLI entry points
+- no longer `chmod`s tracked files inside the managed checkout
+- configures the managed checkout to ignore executable-bit-only drift while still refusing content changes
+- invokes staged updater scripts through `bash` so update safety does not depend on archive/file-mode behavior
+- preserves the existing canonical-origin, dirty-content, staging, rollback and RF-state safety checks
+
+A system that hit the original mode-only refusal can recover without rebuilding MMDVM-Host or DMRGateway by setting `core.fileMode=false` on `/opt/ywd-hotspot/repo` and rerunning `MIGRATE-TO-GITHUB.sh`. See `docs/UPGRADING.md`.
+
 Highlights:
 
 - WebUI About page with larger optimized YWD-Hotspot logo
