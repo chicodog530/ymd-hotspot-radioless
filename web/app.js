@@ -7,6 +7,7 @@ let configDoc = null;
 let secretMode = null;
 let dirty = false;
 let lastHeardCollapsed = localStorage.getItem('ywd.lastheardCollapsed') === '1';
+const CAL_SAMPLE_TARGET = 3;
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -45,6 +46,127 @@ function formatUptime(seconds) {
   return `${m}m`;
 }
 
+function calibrationAggregates(tests) {
+  const groups = new Map();
+  (tests || []).forEach(x => {
+    if (x?.ber_pct == null) return;
+    const off = Number(x.rx_offset ?? 0);
+    if (!Number.isFinite(off)) return;
+    if (!groups.has(off)) groups.set(off, []);
+    groups.get(off).push(x);
+  });
+  return Array.from(groups.entries()).map(([rx_offset, rows]) => {
+    const bers = rows.map(x => Number(x.ber_pct)).filter(Number.isFinite);
+    const rssis = rows.map(x => Number(x.rssi_dbm)).filter(Number.isFinite);
+    const durations = rows.map(x => Number(x.duration_s)).filter(Number.isFinite);
+    return {
+      rx_offset,
+      samples: rows.length,
+      avg_ber: bers.length ? bers.reduce((a, b) => a + b, 0) / bers.length : null,
+      best_ber: bers.length ? Math.min(...bers) : null,
+      avg_rssi: rssis.length ? rssis.reduce((a, b) => a + b, 0) / rssis.length : null,
+      avg_duration: durations.length ? durations.reduce((a, b) => a + b, 0) / durations.length : null,
+    };
+  }).sort((a, b) => a.rx_offset - b.rx_offset);
+}
+
+function calibrationRecommendation(tests) {
+  const aggregates = calibrationAggregates(tests);
+  const rank = rows => rows.slice().sort((a, b) =>
+    (a.avg_ber ?? 999) - (b.avg_ber ?? 999) || b.samples - a.samples || Math.abs(a.rx_offset) - Math.abs(b.rx_offset)
+  )[0] || null;
+  return {
+    aggregates,
+    recommended: rank(aggregates.filter(x => x.samples >= CAL_SAMPLE_TARGET)),
+    provisional: rank(aggregates),
+  };
+}
+
+function ensureCalibrationTools() {
+  const page = $('calibration');
+  if (!page || $('calAggregateCard')) return;
+
+  const record = $('recordCal');
+  const adjustRow = record?.parentElement;
+  if (adjustRow && !adjustRow.querySelector('[data-delta="-500"]')) {
+    const neg = document.createElement('button');
+    neg.className = 'btn ctl calAdj'; neg.dataset.delta = '-500'; neg.textContent = '-500';
+    const pos = document.createElement('button');
+    pos.className = 'btn ctl calAdj'; pos.dataset.delta = '500'; pos.textContent = '+500';
+    adjustRow.prepend(neg); adjustRow.append(pos);
+  }
+
+  const rawRuns = $('calRows')?.closest('article.card');
+  const card = document.createElement('article');
+  card.className = 'card';
+  card.id = 'calAggregateCard';
+  card.innerHTML = `
+    <div class="card-title title-row"><span>RX OFFSET SUMMARY</span><span class="hint">${CAL_SAMPLE_TARGET} samples/offset before recommendation</span></div>
+    <div id="calSessionSummary" class="hint">No calibration session yet.</div>
+    <div class="tablewrap"><table><thead><tr><th>OFFSET</th><th>SAMPLES</th><th>AVG BER</th><th>BEST BER</th><th>AVG RSSI</th></tr></thead><tbody id="calAggregateRows"></tbody></table></div>
+    <div class="buttonrow wrap">
+      <button class="btn primary ctl" id="calUseBest" disabled>USE BEST RX OFFSET</button>
+      <button class="btn" id="calExportJson">EXPORT JSON</button>
+      <button class="btn" id="calExportCsv">EXPORT CSV</button>
+    </div>
+    <p class="hint">The recommendation uses average BER, not one lucky packet. Applying it still requires an explicit confirmation.</p>`;
+  if (rawRuns) page.insertBefore(card, rawRuns); else page.append(card);
+}
+
+function downloadText(filename, text, type) {
+  const blob = new Blob([text], {type});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function exportCalibration(format) {
+  const cal = state?.calibration || {tests: []};
+  const tests = cal.tests || [];
+  const rec = calibrationRecommendation(tests);
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  if (format === 'json') {
+    const payload = {
+      ywd_hotspot_version: state?.build?.version || state?.version || 'unknown',
+      branch: state?.build?.branch || 'unknown',
+      commit: state?.build?.commit || 'unknown',
+      update_channel: state?.build?.update_channel || state?.build?.branch || 'unknown',
+      exported_at: new Date().toISOString(),
+      session_started_at: cal.session_started_at || null,
+      sample_target: CAL_SAMPLE_TARGET,
+      baseline: cal.baseline || null,
+      samples: tests,
+      aggregates: rec.aggregates,
+      recommended: rec.recommended,
+      provisional: rec.provisional,
+    };
+    downloadText(`ywd-hotspot-calibration-${stamp}.json`, JSON.stringify(payload, null, 2) + '\n', 'application/json');
+    toast('Calibration JSON exported');
+    return;
+  }
+  const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const lines = ['time,rx_offset_hz,ber_pct,rssi_dbm,duration_s,source,destination'];
+  tests.forEach(x => lines.push([x.time, x.rx_offset, x.ber_pct, x.rssi_dbm, x.duration_s, x.source, x.destination].map(q).join(',')));
+  downloadText(`ywd-hotspot-calibration-${stamp}.csv`, lines.join('\n') + '\n', 'text/csv');
+  toast('Calibration CSV exported');
+}
+
+async function useBestCalibration() {
+  const tests = state?.calibration?.tests || [];
+  const best = calibrationRecommendation(tests).recommended;
+  if (!best) return toast(`Need ${CAL_SAMPLE_TARGET} samples at an offset before a recommendation is available`, true);
+  const msg = `Use RX offset ${best.rx_offset} Hz?\n\n${best.samples} samples · ${best.avg_ber.toFixed(3)}% average BER.\n\nThis will save/apply the offset and restart the active RF stack.`;
+  if (!confirm(msg)) return;
+  try {
+    await post('/api/config/save', {config: {radio: {rx_offset: best.rx_offset}}});
+    await post('/api/config/apply', {});
+    toast(`Recommended RX offset ${best.rx_offset} Hz applied`);
+    setDirty(false);
+    setTimeout(() => { getStatus(); loadConfig(true); }, 900);
+  } catch (e) { toast(e.message, true); }
+}
+
 function setDirty(v) {
   dirty = !!v;
   const b = $('unsavedBadge');
@@ -57,6 +179,8 @@ function setCtl() {
   $$('.ctl').forEach(b => b.disabled = !auth);
   ['dropQso', 'dropDyn', 'addTg'].forEach(id => $(id).disabled = !(auth && key));
   if ($('restoreBaseline')) $('restoreBaseline').disabled = !(auth && state?.calibration?.baseline);
+  const best = calibrationRecommendation(state?.calibration?.tests || []).recommended;
+  if ($('calUseBest')) $('calUseBest').disabled = !(auth && best);
   $('loginBtn').hidden = auth;
   $('logoutBtn').hidden = !auth;
   const configured = state?.controls?.auth_configured;
@@ -92,15 +216,18 @@ function render(d) {
   state = d;
   const uptime = formatUptime(d.system.uptime_s);
   const build = d.build || {};
+  const displayVersion = build.version || d.version;
   const buildBranch = build.branch || 'unknown';
   const buildCommit = build.commit_short || ((build.commit && build.commit !== 'unknown') ? String(build.commit).slice(0, 10) : 'unknown');
-  $('version').textContent = `${d.version} · ${d.system.hostname || 'hotspot'} · UP ${uptime}`;
-  $('buildMeta').textContent = `${buildBranch} @ ${buildCommit} · ${build.source || 'unknown source'}${build.source_state ? ' · ' + build.source_state : ''}`;
-  $('footerMeta').textContent = `YWD-Hotspot ${d.version} · ${buildBranch} @ ${buildCommit} · ${d.system.hostname || 'hotspot'} · uptime ${uptime}`;
+  const updateChannel = build.update_channel || buildBranch;
+  $('version').textContent = `${displayVersion} · ${d.system.hostname || 'hotspot'} · UP ${uptime}`;
+  $('buildMeta').textContent = `${buildBranch} @ ${buildCommit} · channel ${updateChannel} · ${build.source || 'unknown source'}${build.source_state ? ' · ' + build.source_state : ''}`;
+  $('footerMeta').textContent = `YWD-Hotspot ${displayVersion} · ${buildBranch} @ ${buildCommit} · channel ${updateChannel} · ${d.system.hostname || 'hotspot'} · uptime ${uptime}`;
   if ($('aboutBuildRows')) {
     $('aboutBuildRows').innerHTML =
-      kv('Version', build.version || d.version) +
+      kv('Version', displayVersion) +
       kv('Git branch / ref', buildBranch) +
+      kv('Update channel', updateChannel) +
       kv('Git commit', build.commit || 'unknown') +
       kv('Commit date', build.commit_date || 'unknown') +
       kv('Source type', build.source || 'unknown') +
@@ -191,18 +318,35 @@ function render(d) {
 function renderCalibration(d) {
   const c = d.config.radio || {};
   const cal = d.calibration || {tests: []};
+  const tests = cal.tests || [];
+  const rec = calibrationRecommendation(tests);
+  const best = rec.recommended;
+  const provisional = rec.provisional;
   $('calRxOffset').textContent = `${c.rx_offset ?? 0} Hz`;
   $('calTxOffset').textContent = `${c.tx_offset ?? 0} Hz`;
   const last = (d.activity?.lastheard || []).find(x => (x.direction === 'rx' || x.path === 'RF RX') && x.ber_pct != null);
   $('calLastBer').textContent = last ? `${last.ber_pct}%${last.rssi_dbm != null ? ' · ' + last.rssi_dbm + ' dBm' : ''}` : '—';
-  $('calBest').textContent = cal.best ? `${cal.best.rx_offset} Hz · ${cal.best.ber_pct}% BER` : '—';
+  $('calBest').textContent = best
+    ? `${best.rx_offset} Hz · ${best.avg_ber.toFixed(3)}% avg BER · ${best.samples} samples`
+    : provisional ? `provisional ${provisional.rx_offset} Hz · ${provisional.avg_ber.toFixed(3)}% · ${provisional.samples}/${CAL_SAMPLE_TARGET} samples` : '—';
   const base = cal.baseline;
   $('baselineStatus').textContent = base?.radio
     ? `${base.time || 'saved'} · RX ${base.radio.rx_offset ?? 0} Hz · TX ${base.radio.tx_offset ?? 0} Hz · RX level ${base.radio.rx_level ?? '—'}% · TX level ${base.radio.tx_level ?? '—'}%`
     : 'none saved';
   if ($('restoreBaseline')) $('restoreBaseline').disabled = !(ctlReady() && base);
+  if ($('calSessionSummary')) {
+    const started = cal.session_started_at ? ago(cal.session_started_at) : 'not started';
+    $('calSessionSummary').textContent = `Session ${started} · ${tests.length} sample${tests.length === 1 ? '' : 's'} · ${rec.aggregates.length} offset${rec.aggregates.length === 1 ? '' : 's'} tested · target ${CAL_SAMPLE_TARGET}/offset`;
+  }
+  if ($('calAggregateRows')) {
+    $('calAggregateRows').innerHTML = rec.aggregates.map(x => `<tr class="${best && x.rx_offset === best.rx_offset ? 'bestrow' : ''}"><td>${esc(x.rx_offset)} Hz</td><td>${esc(x.samples)}/${CAL_SAMPLE_TARGET}</td><td>${x.avg_ber == null ? '—' : esc(x.avg_ber.toFixed(3)) + '%'}</td><td>${x.best_ber == null ? '—' : esc(x.best_ber.toFixed(3)) + '%'}</td><td>${x.avg_rssi == null ? '—' : esc(x.avg_rssi.toFixed(1)) + ' dBm'}</td></tr>`).join('') || '<tr><td colspan="5">Record repeated Parrot calls at each RX offset to build the comparison.</td></tr>';
+  }
+  if ($('calUseBest')) {
+    $('calUseBest').disabled = !(ctlReady() && best);
+    $('calUseBest').textContent = best ? `USE BEST RX OFFSET · ${best.rx_offset} Hz` : `USE BEST RX OFFSET · NEED ${CAL_SAMPLE_TARGET} SAMPLES`;
+  }
   const bestTime = cal.best?.time;
-  $('calRows').innerHTML = (cal.tests || []).map(x => `<tr class="${bestTime && x.time === bestTime ? 'bestrow' : ''}"><td>${esc(x.rx_offset)} Hz</td><td>${esc(x.ber_pct)}%</td><td>${esc(x.rssi_dbm ?? '—')} dBm</td><td>${esc(dur(x.duration_s))}</td><td>${esc(x.source || '—')}</td><td>${esc(x.destination || '—')}</td></tr>`).join('') || '<tr><td colspan="6">No calibration runs recorded yet.</td></tr>';
+  $('calRows').innerHTML = tests.map(x => `<tr class="${bestTime && x.time === bestTime ? 'bestrow' : ''}"><td>${esc(x.rx_offset)} Hz</td><td>${esc(x.ber_pct)}%</td><td>${esc(x.rssi_dbm ?? '—')} dBm</td><td>${esc(dur(x.duration_s))}</td><td>${esc(x.source || '—')}</td><td>${esc(x.destination || '—')}</td></tr>`).join('') || '<tr><td colspan="6">No calibration runs recorded yet.</td></tr>';
 }
 
 async function getStatus() {
@@ -386,10 +530,11 @@ async function copySupportSummary() {
     const sr = await fetch('/api/status', {cache: 'no-store'}), s = await sr.json();
     const hr = await fetch('/api/health', {cache: 'no-store'}), h = await hr.json();
     const r = s.config?.radio || {}, w = h.wifi || {}, m = h.memory || {}, d = h.disk || {}, th = h.throttled || {};
-    const best = s.calibration?.best;
+    const calRec = calibrationRecommendation(s.calibration?.tests || []);
+    const best = calRec.recommended || calRec.provisional;
     const lines = [
-      `YWD-Hotspot ${s.version}`,
-      `Build: ${s.build?.branch || 'unknown'} @ ${s.build?.commit_short || String(s.build?.commit || 'unknown').slice(0, 10)} | ${s.build?.source || 'unknown'} / ${s.build?.source_state || 'unknown'}`,
+      `YWD-Hotspot ${s.build?.version || s.version}`,
+      `Build: ${s.build?.branch || 'unknown'} @ ${s.build?.commit_short || String(s.build?.commit || 'unknown').slice(0, 10)} | channel ${s.build?.update_channel || s.build?.branch || 'unknown'} | ${s.build?.source || 'unknown'} / ${s.build?.source_state || 'unknown'}`,
       `Host: ${s.system?.hostname || 'unknown'} | Uptime: ${formatUptime(s.system?.uptime_s)}`,
       `Services: MMDVM=${s.services?.mmdvmhost} Gateway=${s.services?.dmrgateway} Dashboard=${s.services?.dashboard} Activity=${s.services?.activity} OLED=${s.services?.oled}`,
       `BrandMeister: ${s.brandmeister?.state} | Master: ${s.config?.brandmeister?.master || 'unknown'}`,
@@ -397,7 +542,7 @@ async function copySupportSummary() {
       `System: ${h.temperature_c ?? '—'} C | throttle ${th.raw || th.value || '0x0'} | RAM ${m.used_mb ?? '—'}/${m.total_mb ?? '—'} MB | disk ${d.used_pct ?? '—'}% used`,
       `Wi-Fi: ${w.ssid || '—'} | ${w.signal_dbm ?? '—'} dBm | errors RX ${w.rx_errors ?? '—'} TX ${w.tx_errors ?? '—'}`,
       `Config: ${s.pending?.pending ? 'PENDING CHANGES' : 'applied'} | RF autostart ${s.config?.maintenance?.rf_autostart ? 'enabled' : 'disabled'}`,
-      `Calibration: ${best ? `best RX ${best.rx_offset} Hz / ${best.ber_pct}% BER` : 'no recorded best'} | baseline ${s.calibration?.baseline ? 'saved' : 'not saved'}`
+      `Calibration: ${best ? `${calRec.recommended ? 'recommended' : 'provisional'} RX ${best.rx_offset} Hz / ${best.avg_ber.toFixed(3)}% avg BER / ${best.samples} samples` : 'no recorded best'} | baseline ${s.calibration?.baseline ? 'saved' : 'not saved'}`
     ];
     const text = lines.join('\n');
     $('supportPreview').textContent = text;
@@ -479,6 +624,7 @@ $('saveSecret').onclick = async () => {
   } catch (e) { toast(e.message, true); }
 };
 
+ensureCalibrationTools();
 $$('.calAdj').forEach(b => b.onclick = async () => {
   if (!confirm(`Change RX offset by ${b.dataset.delta} Hz and restart the active RF stack?`)) return;
   try { const d = await post('/api/calibration/adjust', {which: 'rx', delta: Number(b.dataset.delta)}); toast(`RX offset now ${d.new_offset} Hz`); setTimeout(getStatus, 800); }
@@ -493,6 +639,9 @@ $('recordCal').onclick = async () => { try { await post('/api/calibration/record
 $('resetCal').onclick = async () => { if (!confirm('Start a new calibration test? This clears the recorded calibration table but does not change RF settings.')) return; try { await post('/api/calibration/reset', {}); toast('New calibration test started'); getStatus(); } catch (e) { toast(e.message, true); } };
 $('saveBaseline').onclick = async () => { try { await post('/api/calibration/baseline/save', {}); toast('Calibration baseline saved'); getStatus(); } catch (e) { toast(e.message, true); } };
 $('restoreBaseline').onclick = async () => { if (!confirm('Restore the saved calibration baseline RF settings and apply them now?')) return; try { await post('/api/calibration/baseline/restore', {}); toast('Calibration baseline restored'); setTimeout(() => { getStatus(); loadConfig(true); }, 900); } catch (e) { toast(e.message, true); } };
+$('calUseBest').onclick = useBestCalibration;
+$('calExportJson').onclick = () => exportCalibration('json');
+$('calExportCsv').onclick = () => exportCalibration('csv');
 
 $('makeDiag').onclick = async () => { try { const d = await post('/api/diagnostics/create', {}); $('diagLink').innerHTML = ` <a class="btn" href="/api/diagnostics/${encodeURIComponent(d.filename)}">DOWNLOAD ${esc(d.filename)}</a>`; toast('Diagnostic bundle created'); } catch (e) { toast(e.message, true); } };
 $('copySupport').onclick = copySupportSummary;
