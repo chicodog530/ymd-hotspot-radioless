@@ -21,6 +21,7 @@ docs/ARCHITECTURE.md
 docs/CALIBRATION.md
 docs/GITHUB-SETUP.md
 docs/INSTALL.md
+docs/TALKGROUPS.md
 docs/UPGRADING.md
 lab/mmdvm-diag.sh
 lib/activity.py
@@ -30,6 +31,7 @@ lib/build_info.py
 lib/config_model.py
 lib/configure.py
 lib/dashboard.py
+lib/dashboard_core.py
 lib/generate-config.py
 lib/health.py
 lib/id-update.py
@@ -45,6 +47,8 @@ systemd/ywd-dmrid-update.service
 systemd/ywd-dmrid-update.timer
 systemd/ywd-mmdvmhost.service
 systemd/ywd-oled.service
+web/app-core.js
 web/app.js
 web/index.html
 web/style.css
+web/talkgroups.js
