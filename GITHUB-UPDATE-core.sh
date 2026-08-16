@@ -129,8 +129,9 @@ trap cleanup EXIT
 git -C "$REPO_DIR" archive "$target_sha" | tar -x -C "$stage"
 
 required=(
-  VERSION UPDATE.sh INSTALL.sh UNINSTALL.sh GITHUB-UPDATE.sh MIGRATE-TO-GITHUB.sh
-  bin/ywd-hotspotctl lab/mmdvm-diag.sh
+  VERSION INSTALL.sh INSTALL-core.sh UPDATE.sh UPDATE-core.sh UNINSTALL.sh
+  GITHUB-UPDATE.sh GITHUB-UPDATE-core.sh MIGRATE-TO-GITHUB.sh MIGRATE-TO-GITHUB-core.sh
+  bin/ywd-hotspotctl bin/ywd-hotspotctl-core bin/ywd-ui.sh lab/mmdvm-diag.sh
   lib/dashboard.py lib/dashboard_core.py lib/admin.py lib/build_info.py lib/generate-config.py lib/migrate.py
   web/index.html web/app.js web/app-core.js web/talkgroups.js web/ui-polish.js web/style.css
   sudoers/ywd-hotspot systemd/ywd-mmdvmhost.service systemd/ywd-dmrgateway.service
@@ -141,7 +142,7 @@ for f in "${required[@]}"; do
   [[ -e "$stage/$f" ]] || { echo "[FAIL] Candidate is missing required file: $f"; exit 1; }
 done
 
-for f in UPDATE.sh INSTALL.sh GITHUB-UPDATE.sh MIGRATE-TO-GITHUB.sh UNINSTALL.sh bin/ywd-hotspotctl lab/mmdvm-diag.sh; do
+for f in UPDATE.sh UPDATE-core.sh INSTALL.sh INSTALL-core.sh GITHUB-UPDATE.sh GITHUB-UPDATE-core.sh MIGRATE-TO-GITHUB.sh MIGRATE-TO-GITHUB-core.sh UNINSTALL.sh bin/ywd-hotspotctl bin/ywd-hotspotctl-core bin/ywd-ui.sh lab/mmdvm-diag.sh; do
   [[ -f "$stage/$f" ]] && bash -n "$stage/$f"
 done
 python3 -m py_compile "$stage"/lib/*.py
