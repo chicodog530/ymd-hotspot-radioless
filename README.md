@@ -8,7 +8,7 @@
 
 YWD-Hotspot is a small, purpose-built alternative to a full hotspot distribution. It keeps the RF path on pinned upstream **MMDVM-Host** and **DMRGateway**, then adds a lightweight local dashboard, activity collector, OLED support, BrandMeister controls, a Talkgroup Manager, transactional configuration, diagnostics, calibration tools, build provenance, and safe GitHub-managed updates without dragging a heavyweight web stack onto the Pi.
 
-> **Development status:** `0.1.0-alpha8-dev` is the active `dev` test build. `0.1.0-alpha7-dev` was user-tested successfully and is retained at the `dev-alpha7-known-good` checkpoint branch. `main` remains on the Alpha6 line until dev work is explicitly promoted. Alpha software can break; keep backups and do not expose the dashboard directly to the public Internet.
+> **Development status:** `0.1.0-alpha9-dev` is the active `dev` polish build. `0.1.0-alpha8-dev` was user-tested successfully and is retained at the `dev-alpha8-known-good` checkpoint branch. `main` remains on the Alpha6 line until dev work is explicitly promoted. Alpha software can break; keep backups and do not expose the dashboard directly to the public Internet.
 
 Canonical repository: **https://github.com/merberg-ai/ywd-hotspot**
 
@@ -44,9 +44,13 @@ Other Raspberry Pi models may work, but the original Pi Zero W is the performanc
 - optional I2C OLED status display
 - About page with project/author/repository information
 - branch/commit/build provenance and persistent `main` / `dev` update channels
+- themed terminal control console plus installer/updater ASCII branding
+- lightweight custom WebUI confirmation modals and toast notifications matching the dashboard theme
 - GitHub-managed update checking, staging, validation and safe apply
 - migration path from older archive-installed builds without recompiling the radio stack
 - plain HTML/CSS/JS dashboard with no Node.js, database server, Docker, or frontend framework
+
+Terminal colors are enabled only when output is attached to a terminal. Set `NO_COLOR=1` to force plain output; redirected JSON/CSV exports remain machine-safe and uncolored.
 
 ## Architecture
 
@@ -254,7 +258,7 @@ Install/update writes non-secret provenance to:
 The dashboard header and About page display information such as:
 
 ```text
-Version         0.1.0-alpha8-dev
+Version         0.1.0-alpha9-dev
 Git branch      dev
 Update channel  dev
 Git commit      <commit SHA>
@@ -299,7 +303,13 @@ sudo ywd-hotspotctl bm dropqso
 sudo ywd-hotspotctl bm dropdyn
 ```
 
-Running `sudo ywd-hotspotctl` with no command opens the interactive control menu.
+Running `sudo ywd-hotspotctl` with no command opens the themed interactive control console.
+
+## WebUI confirmation behavior
+
+YWD-Hotspot uses lightweight custom HTML/CSS/JS modals for in-app confirmations such as RF actions, reboot, calibration changes, configuration restore/apply, and Talkgroup Manager apply/remove operations. These are rendered entirely in the browser and add no daemon or server-side polling load to the Pi.
+
+The browser's close/reload warning for unsaved Settings remains the native `beforeunload` dialog. Modern browsers intentionally prevent sites from replacing that security-controlled prompt with custom UI.
 
 ## Configuration and runtime data
 
@@ -374,7 +384,7 @@ Do not casually move these pins while calibration/stability testing is in progre
 
 ## Current development focus
 
-The `dev` channel is now testing the Talkgroup Manager on top of the successful Alpha7-dev update-channel and guided-calibration work. RF calibration remains deliberately separate from BrandMeister subscription management; no MMDVM-Host or DMRGateway pin changes are included in Alpha8-dev.
+The `dev` channel is in a polish pass on top of the user-tested Alpha8 Talkgroup Manager: consistent console branding/color, lighter-weight custom WebUI confirmations, and small mobile UX improvements. This pass deliberately does not change MMDVM-Host, DMRGateway, modem calibration logic, or BrandMeister routing behavior.
 
 See [docs/CALIBRATION.md](docs/CALIBRATION.md) and [docs/TALKGROUPS.md](docs/TALKGROUPS.md).
 
