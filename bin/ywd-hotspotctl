@@ -5,6 +5,21 @@ CFG=/etc/ywd-hotspot/config.json
 ADMIN=/usr/local/libexec/ywd-hotspot-admin
 BUILD_INFO=/etc/ywd-hotspot/build-info.json
 
+# Canonical config and build provenance live under a deliberately protected
+# /etc/ywd-hotspot directory because the same directory contains reusable
+# credentials. Read-only CLI commands transparently elevate only when needed
+# instead of printing misleading Permission denied / unknown output.
+if [[ $EUID -ne 0 ]]; then
+  case "${1:-}" in
+    status|source)
+      if [[ ! -r "$CFG" || ! -r "$BUILD_INFO" ]]; then
+        echo "YWD-Hotspot protected metadata requires sudo; elevating this read-only command..." >&2
+        exec sudo "$0" "$@"
+      fi
+      ;;
+  esac
+fi
+
 need_root(){ [[ $EUID -eq 0 ]] || { echo "Run with sudo: sudo ywd-hotspotctl $*"; exit 1; }; }
 
 status(){
