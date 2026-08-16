@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""YWD-Hotspot dashboard extension wrapper for Talkgroup Manager."""
+"""YWD-Hotspot dashboard extension wrapper for Talkgroup Manager and UI polish."""
 from __future__ import annotations
 
 import json
@@ -189,6 +189,9 @@ class H(core.H):
             return
         if path == "/talkgroups.js":
             self.serve_static("talkgroups.js", "application/javascript; charset=utf-8")
+            return
+        if path == "/ui-polish.js":
+            self.serve_static("ui-polish.js", "application/javascript; charset=utf-8")
             return
         if path == "/api/talkgroups/search":
             qs = parse_qs(parsed.query, keep_blank_values=False)
