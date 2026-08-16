@@ -6,9 +6,9 @@
 
 **A lightweight DMR hotspot stack for Raspberry Pi + MMDVM HAT hardware.**
 
-YWD-Hotspot is a small, purpose-built alternative to a full hotspot distribution. It keeps the RF path on pinned upstream **MMDVM-Host** and **DMRGateway**, then adds a lightweight local dashboard, activity collector, OLED support, BrandMeister controls, transactional configuration, diagnostics, calibration tools, build provenance, and safe GitHub-managed updates without dragging a heavyweight web stack onto the Pi.
+YWD-Hotspot is a small, purpose-built alternative to a full hotspot distribution. It keeps the RF path on pinned upstream **MMDVM-Host** and **DMRGateway**, then adds a lightweight local dashboard, activity collector, OLED support, BrandMeister controls, a Talkgroup Manager, transactional configuration, diagnostics, calibration tools, build provenance, and safe GitHub-managed updates without dragging a heavyweight web stack onto the Pi.
 
-> **Development status:** `0.1.0-alpha6` is the current development/test build. `0.1.0-alpha4.1` remains the last explicitly confirmed known-good checkpoint. Alpha software can break; keep backups and do not expose the dashboard directly to the public Internet.
+> **Development status:** `0.1.0-alpha8-dev` is the active `dev` test build. `0.1.0-alpha7-dev` was user-tested successfully and is retained at the `dev-alpha7-known-good` checkpoint branch. `main` remains on the Alpha6 line until dev work is explicitly promoted. Alpha software can break; keep backups and do not expose the dashboard directly to the public Internet.
 
 Canonical repository: **https://github.com/merberg-ai/ywd-hotspot**
 
@@ -31,6 +31,7 @@ Other Raspberry Pi models may work, but the original Pi Zero W is the performanc
 - pinned MMDVM-Host and DMRGateway builds
 - DMR-only simplex configuration
 - BrandMeister connectivity and server-side API controls
+- dedicated BrandMeister Talkgroup Manager with directory search, static-TG planning, favorites and saved sets
 - live **RX FROM RADIO** / **TX TO RADIO** activity
 - Last Heard with caller/TG, BER, RSSI and packet-loss information when available
 - RadioID callsign lookup with lightweight periodic updates
@@ -38,11 +39,11 @@ Other Raspberry Pi models may work, but the original Pi Zero W is the performanc
 - RF-safe start/stop/restart behavior
 - local web-control password for write/admin actions
 - approximate city/state or ZIP/postal location lookup
-- calibration baseline + RX BER test session tools
+- guided RX calibration with repeated-sample BER aggregation and export
 - health, persistent journaling and sanitized diagnostic exports
 - optional I2C OLED status display
 - About page with project/author/repository information
-- branch/commit/build provenance in the dashboard header and About page
+- branch/commit/build provenance and persistent `main` / `dev` update channels
 - GitHub-managed update checking, staging, validation and safe apply
 - migration path from older archive-installed builds without recompiling the radio stack
 - plain HTML/CSS/JS dashboard with no Node.js, database server, Docker, or frontend framework
@@ -158,7 +159,7 @@ Configure the local dashboard write-control password:
 sudo ywd-hotspotctl web-password
 ```
 
-Configure the separate BrandMeister API v2 key if you want Drop QSO/static TG controls:
+Configure the separate BrandMeister API v2 key if you want static-TG and Drop QSO controls:
 
 ```bash
 sudo ywd-hotspotctl bm-api-key
@@ -171,6 +172,20 @@ http://PI-IP:8080/
 ```
 
 The dashboard port is configurable and may differ from `8080`.
+
+## Talkgroup Manager
+
+The **TALKGROUPS** page provides a safer workflow than firing individual API changes immediately:
+
+1. search the public BrandMeister talkgroup directory by TG ID or name
+2. add/remove TGs from a desired static plan
+3. review the calculated `ADD` / `REMOVE` diff
+4. press **APPLY PLAN**
+5. confirm the exact BrandMeister changes
+
+The directory is fetched only on demand and cached locally for 24 hours so repeated searches are cheap on the original Pi Zero W. Favorites and named static sets are browser-local convenience data and never change BrandMeister by themselves.
+
+See [docs/TALKGROUPS.md](docs/TALKGROUPS.md).
 
 ## GitHub-managed updates
 
@@ -188,18 +203,28 @@ Fetch and validate the candidate without changing the live application:
 sudo ywd-hotspotctl update --dry-run
 ```
 
-Apply the current `main` branch after an explicit confirmation:
+Apply the selected persistent update channel after explicit confirmation:
 
 ```bash
 sudo ywd-hotspotctl update
+```
+
+Select a persistent channel:
+
+```bash
+sudo ywd-hotspotctl update-channel main
+sudo ywd-hotspotctl update-channel dev
 ```
 
 Specific refs are also supported:
 
 ```bash
 sudo ywd-hotspotctl update --branch main
+sudo ywd-hotspotctl update --branch dev
 sudo ywd-hotspotctl update --tag v0.1.0-alpha6
 ```
+
+A successful explicit `--branch main` or `--branch dev` update remembers that branch as the future no-argument update channel.
 
 The GitHub updater:
 
@@ -229,12 +254,13 @@ Install/update writes non-secret provenance to:
 The dashboard header and About page display information such as:
 
 ```text
-Version       0.1.0-alpha6
-Git branch    main
-Git commit    <commit SHA>
-Commit date   <Git commit date>
-Source        github
-Source state  clean
+Version         0.1.0-alpha8-dev
+Git branch      dev
+Update channel  dev
+Git commit      <commit SHA>
+Commit date     <Git commit date>
+Source          github
+Source state    clean
 ```
 
 The About page also displays the optimized YWD-Hotspot logo, links to the canonical GitHub repository and `https://kj6ywd.net`, and credits **KJ6YWD**.
@@ -247,10 +273,13 @@ ywd-hotspotctl source
 ywd-hotspotctl health
 ywd-hotspotctl lastheard
 ywd-hotspotctl logs
+ywd-hotspotctl calibration
+ywd-hotspotctl update-channel
 
 sudo ywd-hotspotctl update --check
 sudo ywd-hotspotctl update --dry-run
 sudo ywd-hotspotctl update
+sudo ywd-hotspotctl update-channel dev
 sudo ywd-hotspotctl migrate-github
 
 sudo ywd-hotspotctl configure
@@ -262,6 +291,12 @@ sudo ywd-hotspotctl start
 sudo ywd-hotspotctl stop
 sudo ywd-hotspotctl update-ids
 sudo ywd-hotspotctl lab
+
+sudo ywd-hotspotctl bm profile
+sudo ywd-hotspotctl bm addtg 3100
+sudo ywd-hotspotctl bm deltg 3100
+sudo ywd-hotspotctl bm dropqso
+sudo ywd-hotspotctl bm dropdyn
 ```
 
 Running `sudo ywd-hotspotctl` with no command opens the interactive control menu.
@@ -285,6 +320,12 @@ Runtime/history data:
 
 ```text
 /var/lib/ywd-hotspot/
+```
+
+Talkgroup directory cache:
+
+```text
+/var/lib/ywd-hotspot/talkgroup-directory.json
 ```
 
 Managed source checkout:
@@ -333,9 +374,9 @@ Do not casually move these pins while calibration/stability testing is in progre
 
 ## Current development focus
 
-Alpha6 adds repository provenance, About/branding integration and the GitHub migration/update path on top of the Alpha5 calibration-prep UI. The next major RF engineering task remains controlled DMR calibration, beginning with **RXOffset using repeatable Parrot transmissions and measured BER**, followed by a stability soak.
+The `dev` channel is now testing the Talkgroup Manager on top of the successful Alpha7-dev update-channel and guided-calibration work. RF calibration remains deliberately separate from BrandMeister subscription management; no MMDVM-Host or DMRGateway pin changes are included in Alpha8-dev.
 
-See [docs/CALIBRATION.md](docs/CALIBRATION.md).
+See [docs/CALIBRATION.md](docs/CALIBRATION.md) and [docs/TALKGROUPS.md](docs/TALKGROUPS.md).
 
 ## Documentation
 
@@ -343,6 +384,7 @@ See [docs/CALIBRATION.md](docs/CALIBRATION.md).
 - [Upgrading and GitHub migration](docs/UPGRADING.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Calibration](docs/CALIBRATION.md)
+- [Talkgroup Manager](docs/TALKGROUPS.md)
 - [Repository notes](docs/GITHUB-SETUP.md)
 - [Security](SECURITY.md)
 - [Contributing](CONTRIBUTING.md)
