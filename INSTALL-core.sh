@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 umask 027
-VERSION="0.1.0-alpha6"
 SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VERSION="$(cat "$SELF/VERSION" 2>/dev/null || echo unknown)"
 REPO_URL="https://github.com/merberg-ai/ywd-hotspot.git"
 REPO_DIR="/opt/ywd-hotspot/repo"
 source "$SELF/pins.env"
@@ -78,8 +78,13 @@ echo; echo "Installing YWD-Hotspot application..."
 rm -rf /opt/ywd-hotspot/app
 install -d -m 0755 /opt/ywd-hotspot/app
 # Copy only appliance/runtime source. A Git checkout may contain a large .git
-# database plus repository docs/artwork that do not belong in /opt.
-for item in bin lib web systemd sudoers lab INSTALL.sh UPDATE.sh UNINSTALL.sh GITHUB-UPDATE.sh MIGRATE-TO-GITHUB.sh VERSION pins.env README.md MANIFEST.txt; do
+# database plus repository docs/artwork that do not belong in /opt. Keep each
+# presentation wrapper next to its core implementation in the deployed app.
+for item in \
+  bin lib web systemd sudoers lab \
+  INSTALL.sh INSTALL-core.sh UPDATE.sh UPDATE-core.sh UNINSTALL.sh \
+  GITHUB-UPDATE.sh GITHUB-UPDATE-core.sh MIGRATE-TO-GITHUB.sh MIGRATE-TO-GITHUB-core.sh \
+  VERSION pins.env README.md MANIFEST.txt; do
   cp -a "$SELF/$item" /opt/ywd-hotspot/app/
 done
 
@@ -88,7 +93,13 @@ done
 install -d -m 0755 /opt/ywd-hotspot/app/assets/branding
 install -m 0644 "$SELF/assets/branding/ywd-hotspot-badge-256.webp" /opt/ywd-hotspot/app/assets/branding/ywd-hotspot-badge-256.webp
 
-chmod +x /opt/ywd-hotspot/app/INSTALL.sh /opt/ywd-hotspot/app/UPDATE.sh /opt/ywd-hotspot/app/UNINSTALL.sh /opt/ywd-hotspot/app/GITHUB-UPDATE.sh /opt/ywd-hotspot/app/MIGRATE-TO-GITHUB.sh /opt/ywd-hotspot/app/bin/ywd-hotspotctl /opt/ywd-hotspot/app/lib/*.py /opt/ywd-hotspot/app/lab/mmdvm-diag.sh
+chmod +x \
+  /opt/ywd-hotspot/app/INSTALL.sh /opt/ywd-hotspot/app/INSTALL-core.sh \
+  /opt/ywd-hotspot/app/UPDATE.sh /opt/ywd-hotspot/app/UPDATE-core.sh /opt/ywd-hotspot/app/UNINSTALL.sh \
+  /opt/ywd-hotspot/app/GITHUB-UPDATE.sh /opt/ywd-hotspot/app/GITHUB-UPDATE-core.sh \
+  /opt/ywd-hotspot/app/MIGRATE-TO-GITHUB.sh /opt/ywd-hotspot/app/MIGRATE-TO-GITHUB-core.sh \
+  /opt/ywd-hotspot/app/bin/ywd-hotspotctl /opt/ywd-hotspot/app/bin/ywd-hotspotctl-core \
+  /opt/ywd-hotspot/app/bin/ywd-ui.sh /opt/ywd-hotspot/app/lib/*.py /opt/ywd-hotspot/app/lab/mmdvm-diag.sh
 install -m 0755 /opt/ywd-hotspot/app/bin/ywd-hotspotctl /usr/local/sbin/ywd-hotspotctl
 install -o root -g root -m 0755 /opt/ywd-hotspot/app/lib/admin.py /usr/local/libexec/ywd-hotspot-admin
 install -o root -g root -m 0440 "$SELF/sudoers/ywd-hotspot" /etc/sudoers.d/ywd-hotspot
