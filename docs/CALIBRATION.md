@@ -1,8 +1,8 @@
 # DMR Calibration Plan
 
-Calibration is the next major engineering phase after the current Alpha6 application/update changes pass testing.
+`0.1.0-alpha7-dev` turns the existing calibration controls into a repeatable RX measurement workflow. The important rule remains unchanged: change **one variable at a time** and use repeatable transmissions.
 
-The important rule is to change **one variable at a time** and use repeatable transmissions. Randomly sweeping RXOffset, TXOffset and levels together produces impressive-looking numbers and useless conclusions.
+Randomly sweeping RXOffset, TXOffset and levels together produces impressive-looking numbers and useless conclusions.
 
 ## Baseline
 
@@ -38,20 +38,83 @@ Recommended test setup:
 - make several 5-10 second transmissions per offset
 - avoid touching RXLevel until RXOffset behavior is understood
 
+## Alpha7-dev sample rule
+
+The WebUI groups recorded calls by RXOffset and calculates:
+
+```text
+sample count
+average BER
+best BER
+average RSSI
+```
+
+A single low-BER packet is **not** enough to produce the apply recommendation. The current target is:
+
+```text
+3 samples per RX offset
+```
+
+Until an offset has at least three samples, the UI may show it as a **provisional** best but will not enable **USE BEST RX OFFSET** for that group.
+
+The recommended group is chosen primarily by the lowest average BER. Sample count and distance from zero are only tie-breakers; the software does not pretend those are additional RF quality measurements.
+
 ## Controlled RXOffset sequence
 
 1. Save the calibration baseline.
 2. Start a new calibration session.
-3. Record several transmissions at RXOffset `0`.
-4. Note BER and RSSI for each observation.
-5. Change only RXOffset by a controlled small step.
-6. Repeat the same number/length of transmissions.
-7. Compare repeatable BER, not a single lucky packet.
+3. Record at least three similar Parrot transmissions at RXOffset `0`.
+4. Note average BER, best BER and RSSI context.
+5. Change only RXOffset by a controlled step.
+6. Repeat the same number and approximate length of transmissions.
+7. Compare **average BER across repeated samples**, not one lucky packet.
 8. Continue around the improving region until the minimum is bracketed.
-9. Confirm the best region with repeated tests.
-10. Only then consider RXLevel if BER is still poor.
+9. Confirm the apparent best region with additional repeated tests.
+10. Use **USE BEST RX OFFSET** only after the recommendation is supported by enough samples.
+11. Only then consider RXLevel if BER is still poor.
 
-The calibration UI highlights the lowest observed BER but deliberately does not auto-apply a "best" value.
+Quick controls include ±100, ±250 and ±500 Hz changes. Each change still uses the normal configuration/apply path and restarts only the active RF stack as required.
+
+## Manual confirmation remains mandatory
+
+Alpha7-dev does not silently tune the modem.
+
+When **USE BEST RX OFFSET** becomes available, it displays the recommended offset, sample count and average BER. Applying it requires an explicit browser confirmation, then uses the normal transactional config-save/config-apply flow.
+
+There is deliberately no corresponding automatic TX recommendation because the hotspot cannot measure the receiving handheld's BER.
+
+## CLI summary
+
+The same aggregate view is available from the terminal:
+
+```bash
+ywd-hotspotctl calibration
+```
+
+The command may transparently request sudo because calibration/config data is stored in protected appliance paths.
+
+Example shape:
+
+```text
+RX OFFSET    N   AVG BER   BEST BER   AVG RSSI
+      -250    3    0.700%     0.300%      -53.0
+         0    3    2.100%     1.600%      -53.0
+```
+
+An asterisk marks the current recommendation.
+
+## Export results
+
+Calibration data contains no BrandMeister password, API key or web-control password.
+
+From the CLI:
+
+```bash
+sudo ywd-hotspotctl calibration export json > calibration.json
+sudo ywd-hotspotctl calibration export csv  > calibration.csv
+```
+
+The WebUI also provides **EXPORT JSON** and **EXPORT CSV** buttons. JSON contains raw samples plus the calculated aggregates/recommendation; CSV contains the individual recorded samples for outside analysis.
 
 ## RSSI vs BER
 
