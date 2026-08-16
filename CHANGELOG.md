@@ -2,6 +2,32 @@
 
 YWD-Hotspot is currently in alpha development. This changelog summarizes project checkpoints rather than promising semantic-versioning stability.
 
+## 0.1.0-alpha7-dev — Dev Channel + Guided RX Calibration
+
+**Status: active development branch only. Not promoted to `main`.**
+
+Highlights:
+
+- persistent `main` / `dev` update channels
+- `sudo ywd-hotspotctl update-channel main|dev`
+- no-argument GitHub updates follow the saved channel
+- a successful `--branch main` or `--branch dev` update remembers that branch as the channel
+- update channel displayed in CLI source/status data and WebUI build/About metadata
+- `ywd-hotspotctl calibration` terminal summary
+- JSON/CSV calibration export from the CLI
+- WebUI RX calibration groups repeated samples by RX offset
+- average BER, best BER, average RSSI and sample count per offset
+- three samples per offset required before the UI offers a recommended RX offset
+- provisional best shown while a group is still under the sample target
+- explicit **USE BEST RX OFFSET** confirmation before save/apply
+- ±500 Hz quick-adjust controls added alongside the smaller calibration steps
+- browser-side JSON/CSV calibration export containing no reusable credentials
+- support summary now reports aggregate calibration results rather than a single lucky packet
+
+The recommendation deliberately uses average measured BER. It does not automatically change RXOffset, RXLevel, TXOffset or TXLevel.
+
+Normal Alpha7-dev application updates do not rebuild the pinned MMDVM-Host or DMRGateway binaries and preserve the existing RF active/enabled policy.
+
 ## 0.1.0-alpha6 — GitHub Integration + About
 
 **Status: current development/test build. Do not treat as known-good until separately confirmed.**
