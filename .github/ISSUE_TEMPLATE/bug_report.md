@@ -11,6 +11,7 @@ Output of:
 
 ```bash
 ywd-hotspotctl version
+ywd-hotspotctl source
 ```
 
 ## Hardware / OS

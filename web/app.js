@@ -91,8 +91,24 @@ function heardSummary(rows) {
 function render(d) {
   state = d;
   const uptime = formatUptime(d.system.uptime_s);
+  const build = d.build || {};
+  const buildBranch = build.branch || 'unknown';
+  const buildCommit = build.commit_short || ((build.commit && build.commit !== 'unknown') ? String(build.commit).slice(0, 10) : 'unknown');
   $('version').textContent = `${d.version} · ${d.system.hostname || 'hotspot'} · UP ${uptime}`;
-  $('footerMeta').textContent = `YWD-Hotspot ${d.version} · ${d.system.hostname || 'hotspot'} · uptime ${uptime}`;
+  $('buildMeta').textContent = `${buildBranch} @ ${buildCommit} · ${build.source || 'unknown source'}${build.source_state ? ' · ' + build.source_state : ''}`;
+  $('footerMeta').textContent = `YWD-Hotspot ${d.version} · ${buildBranch} @ ${buildCommit} · ${d.system.hostname || 'hotspot'} · uptime ${uptime}`;
+  if ($('aboutBuildRows')) {
+    $('aboutBuildRows').innerHTML =
+      kv('Version', build.version || d.version) +
+      kv('Git branch / ref', buildBranch) +
+      kv('Git commit', build.commit || 'unknown') +
+      kv('Commit date', build.commit_date || 'unknown') +
+      kv('Source type', build.source || 'unknown') +
+      kv('Source state', build.source_state || 'unknown') +
+      kv('Installed at', build.installed_at || 'unknown') +
+      kv('Host', d.system.hostname || 'unknown') +
+      kv('Uptime', uptime);
+  }
   setCtl();
 
   const rf = d.services.mmdvmhost === 'active';
@@ -196,6 +212,7 @@ async function getStatus() {
     render(await r.json());
   } catch (e) {
     $('version').textContent = 'dashboard API unavailable';
+    if ($('buildMeta')) $('buildMeta').textContent = 'source unavailable';
   }
 }
 
@@ -372,6 +389,7 @@ async function copySupportSummary() {
     const best = s.calibration?.best;
     const lines = [
       `YWD-Hotspot ${s.version}`,
+      `Build: ${s.build?.branch || 'unknown'} @ ${s.build?.commit_short || String(s.build?.commit || 'unknown').slice(0, 10)} | ${s.build?.source || 'unknown'} / ${s.build?.source_state || 'unknown'}`,
       `Host: ${s.system?.hostname || 'unknown'} | Uptime: ${formatUptime(s.system?.uptime_s)}`,
       `Services: MMDVM=${s.services?.mmdvmhost} Gateway=${s.services?.dmrgateway} Dashboard=${s.services?.dashboard} Activity=${s.services?.activity} OLED=${s.services?.oled}`,
       `BrandMeister: ${s.brandmeister?.state} | Master: ${s.config?.brandmeister?.master || 'unknown'}`,

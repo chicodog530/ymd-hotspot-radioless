@@ -2,9 +2,35 @@
 
 YWD-Hotspot is currently in alpha development. This changelog summarizes project checkpoints rather than promising semantic-versioning stability.
 
+## 0.1.0-alpha6 — GitHub Integration + About
+
+**Status: current development/test build. Do not treat as known-good until separately confirmed.**
+
+Highlights:
+
+- WebUI About page with larger optimized YWD-Hotspot logo
+- links to the canonical GitHub repository and `https://kj6ywd.net`
+- KJ6YWD author credit
+- branch/ref, commit, commit date, source type/state and version provenance
+- compact branch/commit display in the main dashboard header
+- `/etc/ywd-hotspot/build-info.json` provenance metadata
+- root-owned managed checkout at `/opt/ywd-hotspot/repo` separate from `/opt/ywd-hotspot/app`
+- `ywd-hotspotctl source`
+- `ywd-hotspotctl update --check`
+- `ywd-hotspotctl update --dry-run`
+- `ywd-hotspotctl update` with branch/tag support
+- staged GitHub candidate validation before changing the live application
+- dirty-checkout and canonical-origin safety checks
+- protected application + configuration pre-update backup and rollback attempt
+- `MIGRATE-TO-GITHUB.sh` for archive-installed systems without radio-stack recompilation
+- `INSTALL.sh` existing-install detection with a GitHub adoption option
+- repository/install/update documentation updated for `merberg-ai/ywd-hotspot`
+
+Normal Alpha6 application updates do not rebuild the pinned MMDVM-Host or DMRGateway binaries and preserve the existing RF active/enabled policy.
+
 ## 0.1.0-alpha5 — Calibration Prep + UI Polish
 
-**Status: currently under test. Do not treat as the known-good checkpoint yet.**
+**Status: superseded by Alpha6 before promotion to a confirmed known-good checkpoint.**
 
 Highlights:
 

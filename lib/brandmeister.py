@@ -16,7 +16,7 @@ from pathlib import Path
 CFG = Path(os.environ.get("YWD_CONFIG", "/etc/ywd-hotspot/config.json"))
 KEY = Path(os.environ.get("YWD_BM_API_KEY", "/etc/ywd-hotspot/bm-api.key"))
 BASE = os.environ.get("YWD_BM_API_BASE", "https://api.brandmeister.network/v2").rstrip("/")
-USER_AGENT = "YWD-Hotspot/0.1.0-alpha5"
+USER_AGENT = "YWD-Hotspot/0.1.0-alpha6"
 
 class BMError(RuntimeError):
     pass

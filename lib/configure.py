@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Interactive fallback configuration wizard. Alpha5 also supports web configuration."""
+"""Interactive fallback configuration wizard. Alpha6 also supports web configuration."""
 import getpass
 import json
 import os
@@ -76,9 +76,9 @@ def main():
     if os.geteuid()!=0: raise SystemExit("Run with sudo/root.")
     c=load(); st=c["station"]; rf=c["radio"]; bm=c["brandmeister"]; web=c["web"]; disp=c["display"]; m=c["maintenance"]
     print("\n============================================================")
-    print(" YWD-Hotspot 0.1.0-alpha5 configuration")
+    print(" YWD-Hotspot 0.1.0-alpha6 configuration")
     print("============================================================")
-    print("Press Enter to keep the current value. The same settings are available in the Alpha5 web UI.\n")
+    print("Press Enter to keep the current value. The same settings are available in the Alpha6 web UI.\n")
     while True:
         callsign=ask("Callsign",st.get("callsign"),True).upper()
         if re.fullmatch(r"[A-Z0-9]{3,10}(?:-[A-Z0-9]{1,2})?",callsign): break

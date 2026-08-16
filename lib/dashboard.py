@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""YWD-Hotspot Alpha5 lightweight dashboard/control server."""
+"""YWD-Hotspot Alpha6 lightweight dashboard/control server."""
 from __future__ import annotations
 
 import json
@@ -21,11 +21,13 @@ import config_model
 import health
 import web_auth
 
-VERSION = "0.1.0-alpha5"
+VERSION = "0.1.0-alpha6"
 CFG = Path(os.environ.get("YWD_CONFIG", "/etc/ywd-hotspot/config.json"))
 ACTIVITY = Path(os.environ.get("YWD_ACTIVITY_STATE", "/run/ywd-hotspot/activity.json"))
 VAR = Path(os.environ.get("YWD_VAR", "/var/lib/ywd-hotspot"))
 WEB = Path(os.environ.get("YWD_WEB_ROOT", "/opt/ywd-hotspot/app/web"))
+BRANDING = Path(os.environ.get("YWD_BRANDING_ROOT", "/opt/ywd-hotspot/app/assets/branding"))
+BUILD_INFO = Path(os.environ.get("YWD_BUILD_INFO", "/etc/ywd-hotspot/build-info.json"))
 HISTORY_META = VAR / "config-history.json"
 AUDIT = VAR / "audit.json"
 APPLIED_STATE = VAR / "applied-state.json"
@@ -273,6 +275,7 @@ def snapshot(headers=None):
     static,dynamic=subscriptions(prof); c=canonical_cfg(); h=brief_health()
     return {
         "version":VERSION,
+        "build":file_json(BUILD_INFO,{"version":VERSION,"repository":"https://github.com/merberg-ai/ywd-hotspot","branch":"unknown","commit":"unknown","commit_short":"unknown","commit_date":"unknown","source":"unknown","source_state":"unknown"}),
         "services":{"mmdvmhost":states.get("ywd-mmdvmhost.service","unknown"),"dmrgateway":states.get("ywd-dmrgateway.service","unknown"),
                     "dashboard":states.get("ywd-dashboard.service","unknown"),"oled":states.get("ywd-oled.service","unknown"),"activity":states.get("ywd-activity.service","unknown")},
         "brandmeister":{"state":bstate,"detail":detail,"profile_error":perr,"static":static,"dynamic":dynamic,"api_key_configured":brandmeister.key_configured()},
@@ -365,6 +368,9 @@ class H(BaseHTTPRequestHandler):
         p=WEB/name
         if not p.is_file(): self.send_json({"error":"not found"},404); return
         self.send_bytes(200,p.read_bytes(),ctype,cache="no-cache")
+    def serve_asset(self,path,ctype):
+        if not path.is_file(): self.send_json({"error":"not found"},404); return
+        self.send_bytes(200,path.read_bytes(),ctype,cache="public, max-age=86400")
     def do_GET(self):
         p=urlparse(self.path).path
         if p=="/api/status": self.send_json(snapshot(self.headers)); return
@@ -382,6 +388,7 @@ class H(BaseHTTPRequestHandler):
         if p in ("/","/index.html"): self.serve_static("index.html","text/html; charset=utf-8"); return
         if p=="/app.js": self.serve_static("app.js","application/javascript; charset=utf-8"); return
         if p=="/style.css": self.serve_static("style.css","text/css; charset=utf-8"); return
+        if p=="/ywd-hotspot-badge.webp": self.serve_asset(BRANDING/"ywd-hotspot-badge-256.webp","image/webp"); return
         self.send_json({"error":"not found"},404)
     def do_POST(self):
         p=urlparse(self.path).path

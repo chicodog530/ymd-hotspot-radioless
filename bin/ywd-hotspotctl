@@ -3,6 +3,7 @@ set -euo pipefail
 APP=/opt/ywd-hotspot/app
 CFG=/etc/ywd-hotspot/config.json
 ADMIN=/usr/local/libexec/ywd-hotspot-admin
+BUILD_INFO=/etc/ywd-hotspot/build-info.json
 
 need_root(){ [[ $EUID -eq 0 ]] || { echo "Run with sudo: sudo ywd-hotspotctl $*"; exit 1; }; }
 
@@ -32,6 +33,15 @@ PY
   command -v vcgencmd >/dev/null && printf "%-18s %s\n" "Throttle" "$(vcgencmd get_throttled 2>/dev/null || true)"
   [[ -x "$APP/lib/brandmeister.py" ]] && printf "%-18s %s\n" "BM API Key" "$(python3 "$APP/lib/brandmeister.py" key-status 2>/dev/null || echo unknown)"
   [[ -x "$APP/lib/web_auth.py" ]] && printf "%-18s %s\n" "Web Controls" "$(python3 "$APP/lib/web_auth.py" status 2>/dev/null || echo unknown)"
+  if [[ -r "$BUILD_INFO" ]]; then
+    python3 - "$BUILD_INFO" <<'PY2'
+import json,sys
+try: d=json.load(open(sys.argv[1]))
+except Exception: d={}
+branch=d.get('branch','unknown'); commit=d.get('commit_short') or str(d.get('commit','unknown'))[:10]
+print(f"{'Git source':18} {branch} @ {commit}")
+PY2
+  fi
   if [[ -r /var/lib/ywd-hotspot/applied-state.json ]]; then
     python3 - <<'PY'
 import json,sys
@@ -41,6 +51,25 @@ print(f"{'Config applied':18} {'yes' if a.get('hash')==config_model.hash_config(
 PY
   fi
 }
+
+source_info(){
+  python3 - "$BUILD_INFO" <<'PY2'
+import json,sys
+try: d=json.load(open(sys.argv[1]))
+except Exception: d={}
+print("YWD-Hotspot source")
+print(f"  Repository : {d.get('repository','https://github.com/merberg-ai/ywd-hotspot')}")
+print(f"  Source     : {d.get('source','unknown')}")
+print(f"  Branch     : {d.get('branch','unknown')}")
+print(f"  Commit     : {d.get('commit','unknown')}")
+print(f"  Commit date: {d.get('commit_date','unknown')}")
+print(f"  State      : {d.get('source_state','unknown')}")
+print(f"  Installed  : {d.get('version','unknown')}")
+PY2
+}
+
+github_update(){ need_root update; exec "$APP/GITHUB-UPDATE.sh" "$@"; }
+migrate_github(){ need_root migrate-github; exec "$APP/MIGRATE-TO-GITHUB.sh" "$@"; }
 
 logs(){ echo "=== MMDVM-Host ==="; journalctl -u ywd-mmdvmhost.service -n 100 --no-pager -o cat; echo; echo "=== DMRGateway ==="; journalctl -u ywd-dmrgateway.service -n 100 --no-pager -o cat; echo; echo "=== Dashboard ==="; journalctl -u ywd-dashboard.service -n 60 --no-pager -o cat; }
 
@@ -88,7 +117,7 @@ update_ids(){ need_root update-ids; python3 "$APP/lib/id-update.py" --force; }
 
 bm(){ local cmd="${1:-profile}"; shift || true; need_root bm; case "$cmd" in profile) python3 "$APP/lib/brandmeister.py" profile;; dropqso) python3 "$APP/lib/brandmeister.py" dropqso 0;; dropdyn) python3 "$APP/lib/brandmeister.py" dropdyn 0;; addtg) [[ "${1:-}" =~ ^[0-9]+$ ]] || { echo "Usage: bm addtg TG"; return 2; }; python3 "$APP/lib/brandmeister.py" addtg "$1" 0;; deltg) [[ "${1:-}" =~ ^[0-9]+$ ]] || { echo "Usage: bm deltg TG"; return 2; }; python3 "$APP/lib/brandmeister.py" deltg "$1" 0;; *) echo "Usage: bm {profile|dropqso|dropdyn|addtg TG|deltg TG}"; return 2;; esac; }
 
-menu(){ while true; do clear; echo "========================================"; echo " YWD Hotspot Control - Alpha5"; echo "========================================"; cat <<'EOF'
+menu(){ while true; do clear; echo "========================================"; echo " YWD Hotspot Control - Alpha6"; echo "========================================"; cat <<'EOF'
  1) Status                 9) Stop/disable RF
  2) Last Heard            10) Configure BM API key
  3) Logs                  11) Configure web password
@@ -98,9 +127,12 @@ menu(){ while true; do clear; echo "========================================"; e
  7) Health                15) Create diagnostic bundle
  8) Start/enable RF       16) Config history
 17) Hardware Lab
+18) Source/build info
+19) Check GitHub update
+20) Update from GitHub
  0) Exit
 EOF
- read -r -p "Select: " n; case "$n" in 1)status;;2)lastheard;;3)logs;;4)restart_running;;5)configure;;6)apply_config;;7)health;;8)start_rf;;9)stop_rf;;10)bm_api_key;;11)web_password;;12)update_ids;;13)bm dropqso;;14)bm dropdyn;;15)diagnostics;;16)history;;17)lab;continue;;0)return;;esac; read -r -p "Enter..." _; done; }
+ read -r -p "Select: " n; case "$n" in 1)status;;2)lastheard;;3)logs;;4)restart_running;;5)configure;;6)apply_config;;7)health;;8)start_rf;;9)stop_rf;;10)bm_api_key;;11)web_password;;12)update_ids;;13)bm dropqso;;14)bm dropdyn;;15)diagnostics;;16)history;;17)lab;continue;;18)source_info;;19)github_update --check;continue;;20)github_update;continue;;0)return;;esac; read -r -p "Enter..." _; done; }
 
 cmd="${1:-menu}"; shift || true
-case "$cmd" in status)status;; logs)logs;; lastheard)lastheard;; restart)restart_running;; configure)configure;; apply)apply_config;; health)health;; diagnostics)diagnostics;; history)history;; lab)lab;; backup)backup;; start)start_rf;; stop)stop_rf;; bm-api-key)bm_api_key;; web-password)web_password;; update-ids)update_ids;; bm)bm "$@";; version)cat "$APP/VERSION";; menu|"")menu;; *) echo "Usage: ywd-hotspotctl {status|logs|lastheard|restart|configure|apply|health|diagnostics|history|lab|backup|start|stop|bm-api-key|web-password|update-ids|bm|version}"; exit 2;; esac
+case "$cmd" in status)status;; source)source_info;; update)github_update "$@";; migrate-github)migrate_github "$@";; logs)logs;; lastheard)lastheard;; restart)restart_running;; configure)configure;; apply)apply_config;; health)health;; diagnostics)diagnostics;; history)history;; lab)lab;; backup)backup;; start)start_rf;; stop)stop_rf;; bm-api-key)bm_api_key;; web-password)web_password;; update-ids)update_ids;; bm)bm "$@";; version)cat "$APP/VERSION";; menu|"")menu;; *) echo "Usage: ywd-hotspotctl {status|source|update|migrate-github|logs|lastheard|restart|configure|apply|health|diagnostics|history|lab|backup|start|stop|bm-api-key|web-password|update-ids|bm|version}"; exit 2;; esac

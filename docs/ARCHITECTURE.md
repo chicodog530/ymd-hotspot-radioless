@@ -110,6 +110,7 @@ The API key and password material must never be emitted in browser-readable conf
 /etc/ywd-hotspot/DMRGateway.ini
 /etc/ywd-hotspot/bm-api.key
 /etc/ywd-hotspot/web-auth.json
+/etc/ywd-hotspot/build-info.json
 
 /var/lib/ywd-hotspot/DMRIds.dat
 /var/lib/ywd-hotspot/lastheard.json
@@ -124,6 +125,43 @@ The API key and password material must never be emitted in browser-readable conf
 ```
 
 Private runtime/config backups can contain credentials and must not be published.
+
+## GitHub source/deployment separation
+
+Alpha6 keeps source management outside the live runtime:
+
+```text
+/opt/ywd-hotspot/repo    root-owned managed Git checkout
+/opt/ywd-hotspot/app     deployed application copy (no .git)
+```
+
+The normal update path is:
+
+```text
+GitHub fetch
+   |
+   v
+resolve target commit
+   |
+   v
+stage + validate candidate
+   |
+   v
+protected app/config backup
+   |
+   v
+transactional UPDATE.sh
+   |
+   v
+restore prior RF service policy
+   |
+   v
+advance managed checkout after success
+```
+
+Network failure, a dirty managed checkout, or candidate-validation failure occurs before the live application is touched. The updater never recompiles pinned MMDVM-Host/DMRGateway during a normal YWD application update.
+
+Build provenance is written to `/etc/ywd-hotspot/build-info.json` and is intentionally non-secret so it can be displayed by the dashboard/About page and CLI.
 
 ## Dashboard design constraints
 

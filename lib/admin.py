@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Privileged, narrow control helper for the Alpha5 web dashboard.
+"""Privileged, narrow control helper for the Alpha6 web dashboard.
 
 This is installed root-owned as /usr/local/libexec/ywd-hotspot-admin and is the
 only command the unprivileged dashboard may sudo. Every action is validated
@@ -44,7 +44,7 @@ CAL_BASELINE = PRIVATE / "calibration-baseline.json"
 CAL_BASELINE_META = VAR / "calibration-baseline.json"
 BMKEY = Path(os.environ.get("YWD_BM_API_KEY", "/etc/ywd-hotspot/bm-api.key"))
 JOURNAL_CONF = Path("/etc/systemd/journald.conf.d/10-ywd-hotspot-persistent.conf")
-VERSION = "0.1.0-alpha5"
+VERSION = "0.1.0-alpha6"
 
 
 def run(args, timeout=20, check=False, env=None):

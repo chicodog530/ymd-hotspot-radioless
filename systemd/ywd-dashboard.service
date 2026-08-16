@@ -16,7 +16,7 @@ RestartSec=3
 MemoryMax=128M
 OOMScoreAdjust=250
 PrivateTmp=true
-# Alpha5 deliberately does not set NoNewPrivileges/ProtectSystem here: the
+# Alpha6 deliberately does not set NoNewPrivileges/ProtectSystem here: the
 # authenticated dashboard must invoke the tightly-scoped sudoers helper.
 # Privilege is limited by /etc/sudoers.d/ywd-hotspot and admin.py validation.
 

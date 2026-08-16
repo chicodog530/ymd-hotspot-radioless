@@ -1,6 +1,6 @@
 # DMR Calibration Plan
 
-Calibration is the next major engineering phase after `0.1.0-alpha5` passes UI/stability testing.
+Calibration is the next major engineering phase after the current Alpha6 application/update changes pass testing.
 
 The important rule is to change **one variable at a time** and use repeatable transmissions. Randomly sweeping RXOffset, TXOffset and levels together produces impressive-looking numbers and useless conclusions.
 
@@ -18,7 +18,7 @@ TXInvert = 1
 RXInvert = 0
 ```
 
-Use the Alpha5 **SAVE CALIBRATION BASELINE** control before changing values.
+Use the WebUI **SAVE CALIBRATION BASELINE** control before changing values.
 
 ## RX comes first
 
@@ -51,7 +51,7 @@ Recommended test setup:
 9. Confirm the best region with repeated tests.
 10. Only then consider RXLevel if BER is still poor.
 
-Alpha5 highlights the lowest observed BER but deliberately does not auto-apply a "best" value.
+The calibration UI highlights the lowest observed BER but deliberately does not auto-apply a "best" value.
 
 ## RSSI vs BER
 

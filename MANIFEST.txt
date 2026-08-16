@@ -3,7 +3,11 @@
 .gitignore
 CHANGELOG.md
 CONTRIBUTING.md
+GITHUB-UPDATE.sh
 INSTALL.sh
+LICENSE
+MANIFEST.txt
+MIGRATE-TO-GITHUB.sh
 README.md
 SECURITY.md
 UNINSTALL.sh
@@ -22,6 +26,7 @@ lab/mmdvm-diag.sh
 lib/activity.py
 lib/admin.py
 lib/brandmeister.py
+lib/build_info.py
 lib/config_model.py
 lib/configure.py
 lib/dashboard.py

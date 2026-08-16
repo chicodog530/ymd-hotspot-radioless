@@ -1,10 +1,16 @@
 # Installing YWD-Hotspot from GitHub
 
-This document covers a fresh source installation of YWD-Hotspot on the project's primary test target: an original Raspberry Pi Zero W with a simplex MMDVM HAT.
+This document covers both a fresh installation and adoption of an existing archive-installed YWD-Hotspot system.
+
+Canonical repository:
+
+```text
+https://github.com/merberg-ai/ywd-hotspot
+```
 
 ## 1. Hardware and OS baseline
 
-Current development baseline:
+Current primary development target:
 
 ```text
 Raspberry Pi Zero W Rev 1.1
@@ -15,7 +21,7 @@ Pi Zero W expected mapping: /dev/serial0 -> /dev/ttyAMA0
 OLED: I2C bus 1, normally 0x3C
 ```
 
-Before installing, make sure the Pi has working networking/SSH and the MMDVM HAT has a suitable antenna attached before RF is enabled.
+Before enabling RF, attach a suitable antenna and verify the configured frequency.
 
 Useful preflight commands:
 
@@ -29,35 +35,67 @@ readlink -f /dev/serial0 2>/dev/null || true
 
 ## 2. Clone the repository
 
-Install Git first if this is a fresh OS image, then replace `OWNER` with the actual GitHub account or organization:
-
 ```bash
 sudo apt update
 sudo apt install -y git
+
 cd ~
-git clone https://github.com/OWNER/ywd-hotspot.git
+git clone https://github.com/merberg-ai/ywd-hotspot.git
 cd ywd-hotspot
 ```
 
-If Git checked the repository out with non-executable script permissions, normalize them before continuing:
+Normalize executable permissions before running scripts:
 
 ```bash
-chmod +x INSTALL.sh UPDATE.sh UNINSTALL.sh
+chmod +x INSTALL.sh UPDATE.sh UNINSTALL.sh GITHUB-UPDATE.sh MIGRATE-TO-GITHUB.sh
 chmod +x bin/ywd-hotspotctl lab/mmdvm-diag.sh
 chmod +x lib/*.py
 ```
 
-The repository also includes `.gitattributes` to keep shell/Python/text sources on LF line endings. This matters because CRLF shell scripts are a wonderfully stupid way to turn a five-minute install into an hour of swearing.
+`.gitattributes` keeps source/script line endings on LF. This prevents the classic CRLF shell-script disaster from eating an evening for no good reason.
 
-## 3. Verify the UART and modem
+## 3. Existing YWD-Hotspot installation
 
-Run the hardware utility:
+If `/etc/ywd-hotspot/config.json` and `/opt/ywd-hotspot/app` already exist, `INSTALL.sh` detects the current appliance before doing any radio-stack compilation.
+
+It offers:
+
+```text
+1) Adopt existing installation and switch to GitHub updates
+2) Full/recovery installation
+3) Cancel
+```
+
+For an existing working hotspot, use **option 1**.
+
+That path:
+
+- preserves `/etc/ywd-hotspot/config.json`
+- preserves BrandMeister credentials
+- preserves the web-control password
+- preserves calibration/history/runtime data
+- preserves the current RF active/enabled state
+- creates/refreshes `/opt/ywd-hotspot/repo`
+- installs the current YWD application layer
+- does **not** compile MMDVM-Host or DMRGateway
+
+The same migration can be invoked directly:
+
+```bash
+sudo ./MIGRATE-TO-GITHUB.sh
+```
+
+This is the intended transition from previous `.tar.gz`/`.zip` installs to GitHub-managed updates.
+
+## 4. Fresh-install UART/modem verification
+
+For a genuinely fresh installation, run:
 
 ```bash
 sudo ./lab/mmdvm-diag.sh
 ```
 
-Option **1** runs the complete read-only diagnostic set. Option **2** performs only the MMDVM firmware probe.
+Option **1** runs the full read-only diagnostic set. Option **2** performs only the MMDVM firmware probe.
 
 On the original Pi Zero W the target mapping is:
 
@@ -65,9 +103,9 @@ On the original Pi Zero W the target mapping is:
 /dev/serial0 -> /dev/ttyAMA0
 ```
 
-If that mapping is not present, option **5** can apply the recommended PL011 configuration. It:
+If it is not correct, option **5** applies the recommended PL011 configuration. It:
 
-- backs up the Pi boot configuration
+- backs up the boot configuration
 - sets `enable_uart=1`
 - adds `dtoverlay=disable-bt`
 - removes UART serial-console tokens from the kernel command line
@@ -81,43 +119,42 @@ After reboot:
 ```bash
 cd ~/ywd-hotspot
 readlink -f /dev/serial0
+sudo ./lab/mmdvm-diag.sh
 ```
 
-Then run the diagnostic probe again if desired.
-
-## 4. Run the installer
+## 5. Run the installer
 
 ```bash
 cd ~/ywd-hotspot
 sudo ./INSTALL.sh
 ```
 
-The script self-elevates through `sudo` when needed.
-
 A fresh installation performs these high-level actions:
 
 1. verifies Raspberry Pi hardware
-2. verifies `/dev/serial0` and the expected Pi Zero W UART mapping
+2. verifies `/dev/serial0` and the Pi Zero W mapping
 3. sends a read-only MMDVM `GET_VERSION` probe
-4. installs build/runtime packages through `apt`
+4. installs required build/runtime packages
 5. creates the restricted `ywd-hotspot` service account
 6. clones MMDVM-Host and DMRGateway into `/opt/ywd-hotspot/src`
 7. checks out the exact commits in `pins.env`
 8. compiles both upstream programs with `make -j1`
-9. installs YWD-Hotspot under `/opt/ywd-hotspot/app`
-10. installs systemd units, the CLI, admin helper and restricted sudo policy
-11. runs the configuration wizard
-12. performs an initial DMR ID update when Internet access is available
-13. configures persistent journaling according to the canonical config
-14. starts the activity/dashboard services
-15. starts the OLED service only if it is enabled and detected
-16. asks for explicit RF-enable confirmation
+9. deploys YWD-Hotspot to `/opt/ywd-hotspot/app`
+10. installs systemd units, CLI, admin helper and restricted sudo policy
+11. writes build/source provenance to `/etc/ywd-hotspot/build-info.json`
+12. creates a managed Git checkout at `/opt/ywd-hotspot/repo` when installed from the canonical Git repository
+13. runs the configuration wizard
+14. performs an initial DMR ID update when possible
+15. configures persistent journaling
+16. starts dashboard/activity services
+17. starts OLED only when configured and detected
+18. asks for explicit RF-enable confirmation
 
-The original Pi Zero W is not exactly a compile farm. Expect the first MMDVM-Host/DMRGateway build to take noticeably longer than the YWD application install itself.
+The original Pi Zero W is not exactly a build server. The first MMDVM-Host/DMRGateway compile can take a while; later normal YWD updates do not repeat that compile.
 
-## 5. Configuration wizard
+## 6. Configuration wizard
 
-The CLI wizard collects the primary station/network settings, including:
+The wizard collects the primary station/network settings, including:
 
 - callsign
 - base DMR ID
@@ -135,48 +172,46 @@ The CLI wizard collects the primary station/network settings, including:
 - RF-at-boot policy
 - persistent journal policy
 
-The canonical file is then written to:
+Canonical configuration:
 
 ```text
 /etc/ywd-hotspot/config.json
 ```
 
-Generated runtime files are:
+Generated runtime files:
 
 ```text
 /etc/ywd-hotspot/MMDVM-Host.ini
 /etc/ywd-hotspot/DMRGateway.ini
 ```
 
-Do not hand-maintain the generated INI files. Change the canonical configuration through the CLI/web backend and let YWD-Hotspot regenerate them.
+Do not hand-maintain the generated INI files. Change canonical configuration through YWD-Hotspot and let it regenerate them.
 
-## 6. RF enable confirmation
+## 7. RF enable confirmation
 
-At the end of a fresh install the installer prints an RF warning and asks:
+At the end of a fresh install the installer asks:
 
 ```text
 Type ENABLE-RF to start AND enable RF at boot now:
 ```
 
-Only the exact text `ENABLE-RF` starts and enables MMDVM-Host/DMRGateway. Any other response leaves the RF path stopped and disabled.
+Only the exact text `ENABLE-RF` starts/enables the RF path. Any other response leaves MMDVM-Host/DMRGateway stopped and disabled.
 
-This is intentional. Updates and installs must never unexpectedly put a transmitter on the air.
+This safety behavior also applies to update/migration logic: source management must never unexpectedly key or enable a transmitter.
 
-## 7. Configure local web control
+## 8. Configure local web control
 
-The status dashboard is readable without control login, but write/admin operations remain locked until a local control password is configured:
+The status dashboard is readable without a control login. Write/admin operations remain locked until a local control password is configured:
 
 ```bash
 sudo ywd-hotspotctl web-password
 ```
 
-This password is separate from BrandMeister credentials.
+This credential is separate from BrandMeister credentials.
 
-## 8. Configure the BrandMeister API key
+## 9. Configure the BrandMeister API key
 
-The RF/network connection uses the Hotspot Security password from the canonical config. Dashboard API controls use a separate BrandMeister API v2 key.
-
-Set it with:
+Set the separate BrandMeister API v2 key with:
 
 ```bash
 sudo ywd-hotspotctl bm-api-key
@@ -184,11 +219,14 @@ sudo ywd-hotspotctl bm-api-key
 
 The key remains server-side on the Pi and is not returned to browser JavaScript.
 
-## 9. Verify services
+## 10. Verify installation and source provenance
 
 ```bash
 ywd-hotspotctl status
+ywd-hotspotctl source
 ```
+
+The second command should show repository/branch/commit metadata when the appliance is GitHub-managed.
 
 Expected services include:
 
@@ -201,17 +239,9 @@ ywd-oled.service
 ywd-dmrid-update.timer
 ```
 
-Whether MMDVMHost/DMRGateway are active depends on whether RF was explicitly enabled.
+Whether the RF services are active depends on explicit operator choice.
 
-For more detail:
-
-```bash
-ywd-hotspotctl health
-ywd-hotspotctl logs
-sudo systemctl --no-pager --full status ywd-dashboard.service
-```
-
-## 10. Open the dashboard
+## 11. Open the dashboard
 
 Find the Pi address:
 
@@ -225,55 +255,80 @@ Then browse to:
 http://PI-IP:8080/
 ```
 
-If you chose another dashboard port, use that port instead.
+Use the configured dashboard port if it differs from `8080`.
 
-The dashboard is intentionally plain HTTP. Keep it on a trusted LAN and do not forward the port directly to the Internet.
+The dashboard is intentionally plain HTTP. Keep it on a trusted LAN and do not forward it directly to the public Internet.
 
-## 11. OLED notes
+The **About** page displays:
 
-The installer scans I2C bus 1. The current primary HAT uses an SSD1306-like display at `0x3C`.
+- optimized YWD-Hotspot logo
+- YWD-Hotspot version
+- Git branch/ref and commit SHA
+- commit date/source state
+- repository link
+- `kj6ywd.net` link
+- KJ6YWD author credit
 
-Check manually with:
+## 12. First GitHub update check
+
+Once GitHub management is active:
+
+```bash
+sudo ywd-hotspotctl update --check
+sudo ywd-hotspotctl update --dry-run
+```
+
+Neither command changes the running application or RF service state. `--check` reports availability; `--dry-run` additionally stages and validates the candidate.
+
+See [UPGRADING.md](UPGRADING.md) before applying updates.
+
+## 13. OLED notes
+
+The installer scans I2C bus 1. The primary test HAT uses an SSD1306-like display at `0x3C`.
 
 ```bash
 i2cdetect -y 1
 ```
 
-If no display is detected, the OLED service can remain disabled without affecting DMR operation.
+OLED failure/absence must not interrupt DMR operation.
 
-## 12. Known harmless DMRGateway MQTT message
+## 14. Known harmless DMRGateway MQTT message
 
-Upstream DMRGateway may attempt a localhost MQTT connection and log a connection-refused message even though YWD-Hotspot does not depend on a local MQTT broker. Do not install Mosquitto solely to silence that message.
+Upstream DMRGateway may attempt a localhost MQTT connection and log connection-refused even though YWD-Hotspot does not depend on a local MQTT broker. Do not install Mosquitto solely to silence that message.
 
-## 13. Fresh-install troubleshooting
+## 15. Troubleshooting
 
-If `/dev/serial0` is missing or maps incorrectly:
+UART/HAT problem:
 
 ```bash
 sudo ./lab/mmdvm-diag.sh
 ```
 
-Use option 5, reboot, and retry the installer.
-
-If the modem probe fails, stop and fix the UART/HAT issue rather than forcing the install.
-
-If BrandMeister does not connect after RF is enabled:
+BrandMeister/network problem:
 
 ```bash
 ywd-hotspotctl status
 ywd-hotspotctl logs
 ```
 
-Verify the master, DMR ID/ESSID and Hotspot Security password. Do not paste reusable credentials into public GitHub issues.
-
-If the dashboard is unavailable:
+Dashboard problem:
 
 ```bash
 systemctl status ywd-dashboard.service --no-pager
 journalctl -u ywd-dashboard.service -n 100 --no-pager
 ```
 
-## 14. Uninstall
+GitHub management problem:
+
+```bash
+ywd-hotspotctl source
+git -C /opt/ywd-hotspot/repo status --short
+git -C /opt/ywd-hotspot/repo remote -v
+```
+
+Do not paste reusable credentials into public GitHub issues.
+
+## 16. Uninstall
 
 From a repository checkout or installed source copy:
 
@@ -281,4 +336,4 @@ From a repository checkout or installed source copy:
 sudo ./UNINSTALL.sh
 ```
 
-The uninstaller removes YWD-Hotspot services/binaries but intentionally keeps `/etc/ywd-hotspot` and `/var/lib/ywd-hotspot` by default so credentials/history are not casually destroyed.
+The uninstaller intentionally preserves configuration/runtime data by default so credentials/history are not casually destroyed.

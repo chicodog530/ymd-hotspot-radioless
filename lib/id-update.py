@@ -13,7 +13,7 @@ from pathlib import Path
 URL = os.environ.get("YWD_DMRID_URL", "https://database.radioid.net/static/user.csv")
 OUT = Path(os.environ.get("YWD_DMRID_FILE", "/var/lib/ywd-hotspot/DMRIds.dat"))
 CFG = Path(os.environ.get("YWD_CONFIG", "/etc/ywd-hotspot/config.json"))
-UA = "YWD-Hotspot/0.1.0-alpha5"
+UA = "YWD-Hotspot/0.1.0-alpha6"
 
 
 def interval_days():

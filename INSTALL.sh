@@ -1,15 +1,39 @@
 #!/usr/bin/env bash
 set -euo pipefail
 umask 027
-VERSION="0.1.0-alpha5"
+VERSION="0.1.0-alpha6"
 SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_URL="https://github.com/merberg-ai/ywd-hotspot.git"
+REPO_DIR="/opt/ywd-hotspot/repo"
 source "$SELF/pins.env"
 if [[ $EUID -ne 0 ]]; then exec sudo "$0" "$@"; fi
+
+if [[ -f /etc/ywd-hotspot/config.json && -d /opt/ywd-hotspot/app ]] && [[ "${YWD_INSTALL_RECOVERY:-0}" != "1" ]]; then
+  cat <<'EOF'
+============================================================
+ Existing YWD-Hotspot installation detected
+============================================================
+  1) Adopt existing installation and switch to GitHub updates
+     - preserves configuration, credentials, calibration data and RF state
+     - does NOT rebuild MMDVM-Host or DMRGateway
+
+  2) Full/recovery installation
+     - runs the complete installer and may rebuild pinned upstream binaries
+
+  3) Cancel
+EOF
+  read -r -p "Selection [1-3]: " existing_choice
+  case "$existing_choice" in
+    1) exec "$SELF/MIGRATE-TO-GITHUB.sh";;
+    2) echo "Continuing with full/recovery installation...";;
+    *) echo "Cancelled."; exit 0;;
+  esac
+fi
 
 cat <<EOF
 ============================================================
  YWD-Hotspot $VERSION installer
- Calibration Prep + UI Polish
+ GitHub Integration + About
 ============================================================
 EOF
 MODEL="$(tr -d '\0' </proc/device-tree/model 2>/dev/null || true)"
@@ -55,11 +79,16 @@ rm -rf /opt/ywd-hotspot/app
 install -d -m 0755 /opt/ywd-hotspot/app
 # Copy only appliance/runtime source. A Git checkout may contain a large .git
 # database plus repository docs/artwork that do not belong in /opt.
-for item in bin lib web systemd sudoers lab INSTALL.sh UPDATE.sh UNINSTALL.sh VERSION pins.env README.md MANIFEST.txt; do
+for item in bin lib web systemd sudoers lab INSTALL.sh UPDATE.sh UNINSTALL.sh GITHUB-UPDATE.sh MIGRATE-TO-GITHUB.sh VERSION pins.env README.md MANIFEST.txt; do
   cp -a "$SELF/$item" /opt/ywd-hotspot/app/
 done
 
-chmod +x /opt/ywd-hotspot/app/bin/ywd-hotspotctl /opt/ywd-hotspot/app/lib/*.py /opt/ywd-hotspot/app/lab/mmdvm-diag.sh
+# Ship only the small WebP badge to the appliance; keep the large master artwork
+# in the repository rather than wasting Pi storage/runtime backups.
+install -d -m 0755 /opt/ywd-hotspot/app/assets/branding
+install -m 0644 "$SELF/assets/branding/ywd-hotspot-badge-256.webp" /opt/ywd-hotspot/app/assets/branding/ywd-hotspot-badge-256.webp
+
+chmod +x /opt/ywd-hotspot/app/INSTALL.sh /opt/ywd-hotspot/app/UPDATE.sh /opt/ywd-hotspot/app/UNINSTALL.sh /opt/ywd-hotspot/app/GITHUB-UPDATE.sh /opt/ywd-hotspot/app/MIGRATE-TO-GITHUB.sh /opt/ywd-hotspot/app/bin/ywd-hotspotctl /opt/ywd-hotspot/app/lib/*.py /opt/ywd-hotspot/app/lab/mmdvm-diag.sh
 install -m 0755 /opt/ywd-hotspot/app/bin/ywd-hotspotctl /usr/local/sbin/ywd-hotspotctl
 install -o root -g root -m 0755 /opt/ywd-hotspot/app/lib/admin.py /usr/local/libexec/ywd-hotspot-admin
 install -o root -g root -m 0440 "$SELF/sudoers/ywd-hotspot" /etc/sudoers.d/ywd-hotspot
@@ -71,6 +100,30 @@ if [[ ! -f /etc/ywd-hotspot/config.json ]]; then python3 /opt/ywd-hotspot/app/li
   python3 /opt/ywd-hotspot/app/lib/migrate.py
   read -r -p "Existing config found. Re-run configuration wizard? [y/N]: " a
   [[ "$a" =~ ^[Yy]$ ]] && python3 /opt/ywd-hotspot/app/lib/configure.py || python3 /opt/ywd-hotspot/app/lib/generate-config.py
+fi
+
+# Record provenance for the dashboard/About page.
+python3 /opt/ywd-hotspot/app/lib/build_info.py write --source-dir "$SELF" >/dev/null
+
+# A fresh install launched from a Git checkout becomes GitHub-managed
+# automatically. The live runtime remains a clean copy in /opt/ywd-hotspot/app.
+if git -C "$SELF" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  source_origin="$(git -C "$SELF" remote get-url origin 2>/dev/null || true)"
+  case "$source_origin" in
+    "$REPO_URL"|"https://github.com/merberg-ai/ywd-hotspot"|"git@github.com:merberg-ai/ywd-hotspot.git")
+      if [[ ! -d "$REPO_DIR/.git" ]]; then
+        rm -rf "$REPO_DIR"
+        git clone --quiet "$REPO_URL" "$REPO_DIR"
+      fi
+      source_sha="$(git -C "$SELF" rev-parse HEAD)"
+      source_branch="$(git -C "$SELF" branch --show-current)"
+      [[ -n "$source_branch" ]] || source_branch=main
+      if git -C "$REPO_DIR" cat-file -e "$source_sha^{commit}" 2>/dev/null; then
+        git -C "$REPO_DIR" checkout --quiet -B "$source_branch" "$source_sha"
+        git -C "$REPO_DIR" branch --set-upstream-to="origin/$source_branch" "$source_branch" >/dev/null 2>&1 || true
+      fi
+      ;;
+  esac
 fi
 
 echo; echo "Initial DMR ID database update (non-fatal if offline)..."
@@ -143,6 +196,8 @@ cat <<EOF
 Dashboard : http://${IP:-PI-IP}:$PORT/
 Control   : sudo ywd-hotspotctl
 Status    : ywd-hotspotctl status
+Source    : ywd-hotspotctl source
+Updates   : sudo ywd-hotspotctl update --check
 
 Web WRITE controls are locked until you set a local control password:
   sudo ywd-hotspotctl web-password

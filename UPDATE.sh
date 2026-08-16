@@ -5,12 +5,14 @@ SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ $EUID -ne 0 ]]; then exec sudo "$0" "$@"; fi
 VERSION="$(cat "$SELF/VERSION")"
 
-echo "============================================================"
-echo " YWD-Hotspot update -> $VERSION"
-echo " Calibration Prep + UI Polish"
-echo "============================================================"
-echo "This updater does NOT recompile MMDVM-Host or DMRGateway."
-echo "It preserves whether RF was running/enabled before the update."
+cat <<EOF
+============================================================
+ YWD-Hotspot update -> $VERSION
+ GitHub Integration + About
+============================================================
+This updater does NOT recompile MMDVM-Host or DMRGateway.
+It preserves whether RF was running/enabled before the update.
+EOF
 
 if ! id ywd-hotspot >/dev/null 2>&1; then
   echo "[FAIL] Existing YWD-Hotspot service account not found. Use INSTALL.sh."
@@ -21,26 +23,86 @@ if [[ ! -f /etc/ywd-hotspot/config.json ]]; then
   exit 1
 fi
 
+# Validate the incoming application before touching the live install.
+required=(VERSION bin lib web systemd sudoers UPDATE.sh GITHUB-UPDATE.sh MIGRATE-TO-GITHUB.sh)
+for item in "${required[@]}"; do [[ -e "$SELF/$item" ]] || { echo "[FAIL] Update source missing $item"; exit 1; }; done
+for f in UPDATE.sh INSTALL.sh GITHUB-UPDATE.sh MIGRATE-TO-GITHUB.sh UNINSTALL.sh bin/ywd-hotspotctl lab/mmdvm-diag.sh; do
+  [[ -f "$SELF/$f" ]] && bash -n "$SELF/$f"
+done
+python3 -m py_compile "$SELF"/lib/*.py
+
 # Capture the current appliance state before replacing units/scripts.
-mmdvm_active=0; gateway_active=0; dashboard_active=0; oled_active=0
-mmdvm_enabled=0; gateway_enabled=0; dashboard_enabled=0; oled_enabled=0
+mmdvm_active=0; gateway_active=0; dashboard_active=0; oled_active=0; activity_active=0; dmrid_active=0
+mmdvm_enabled=0; gateway_enabled=0; dashboard_enabled=0; oled_enabled=0; activity_enabled=0; dmrid_enabled=0
 systemctl is-active --quiet ywd-mmdvmhost.service 2>/dev/null && mmdvm_active=1 || true
 systemctl is-active --quiet ywd-dmrgateway.service 2>/dev/null && gateway_active=1 || true
 systemctl is-active --quiet ywd-dashboard.service 2>/dev/null && dashboard_active=1 || true
 systemctl is-active --quiet ywd-oled.service 2>/dev/null && oled_active=1 || true
+systemctl is-active --quiet ywd-activity.service 2>/dev/null && activity_active=1 || true
+systemctl is-active --quiet ywd-dmrid-update.timer 2>/dev/null && dmrid_active=1 || true
 systemctl is-enabled --quiet ywd-mmdvmhost.service 2>/dev/null && mmdvm_enabled=1 || true
 systemctl is-enabled --quiet ywd-dmrgateway.service 2>/dev/null && gateway_enabled=1 || true
 systemctl is-enabled --quiet ywd-dashboard.service 2>/dev/null && dashboard_enabled=1 || true
 systemctl is-enabled --quiet ywd-oled.service 2>/dev/null && oled_enabled=1 || true
+systemctl is-enabled --quiet ywd-activity.service 2>/dev/null && activity_enabled=1 || true
+systemctl is-enabled --quiet ywd-dmrid-update.timer 2>/dev/null && dmrid_enabled=1 || true
 
 mkdir -p /var/backups/ywd-hotspot
 stamp="$(date +%Y%m%d-%H%M%S)"
-backup="/var/backups/ywd-hotspot/pre-alpha5-$stamp.tar.gz"
-tar -czf "$backup" /etc/ywd-hotspot 2>/dev/null
-chmod 600 "$backup"
-echo "Protected pre-update config backup: $backup"
+backup_dir="/var/backups/ywd-hotspot/pre-${VERSION}-${stamp}"
+install -d -m 0700 "$backup_dir"
+tar -czf "$backup_dir/config.tar.gz" /etc/ywd-hotspot 2>/dev/null
+[[ -d /opt/ywd-hotspot/app ]] && tar -czf "$backup_dir/app.tar.gz" /opt/ywd-hotspot/app 2>/dev/null || true
+chmod 600 "$backup_dir"/*.tar.gz 2>/dev/null || true
+echo "Protected pre-update backup: $backup_dir"
 
-echo "Installing Alpha5 runtime files..."
+rollback(){
+  rc=$?
+  trap - ERR INT TERM
+  set +e
+  echo
+  echo "[FAIL] Update failed (exit $rc). Restoring the previous YWD-Hotspot application/configuration..."
+  systemctl stop ywd-dmrgateway.service ywd-mmdvmhost.service ywd-dashboard.service ywd-oled.service ywd-activity.service ywd-dmrid-update.timer 2>/dev/null || true
+
+  if [[ -f "$backup_dir/config.tar.gz" ]]; then
+    rm -rf /etc/ywd-hotspot
+    tar -xzf "$backup_dir/config.tar.gz" -C /
+  fi
+  if [[ -f "$backup_dir/app.tar.gz" ]]; then
+    rm -rf /opt/ywd-hotspot/app
+    tar -xzf "$backup_dir/app.tar.gz" -C /
+  fi
+
+  if [[ -d /opt/ywd-hotspot/app ]]; then
+    [[ -f /opt/ywd-hotspot/app/bin/ywd-hotspotctl ]] && install -m 0755 /opt/ywd-hotspot/app/bin/ywd-hotspotctl /usr/local/sbin/ywd-hotspotctl
+    [[ -f /opt/ywd-hotspot/app/lib/admin.py ]] && install -o root -g root -m 0755 /opt/ywd-hotspot/app/lib/admin.py /usr/local/libexec/ywd-hotspot-admin
+    [[ -f /opt/ywd-hotspot/app/sudoers/ywd-hotspot ]] && install -o root -g root -m 0440 /opt/ywd-hotspot/app/sudoers/ywd-hotspot /etc/sudoers.d/ywd-hotspot
+    for unit in /opt/ywd-hotspot/app/systemd/*.service /opt/ywd-hotspot/app/systemd/*.timer; do
+      [[ -e "$unit" ]] && install -m 0644 "$unit" "/etc/systemd/system/$(basename "$unit")"
+    done
+  fi
+  systemctl daemon-reload
+
+  if (( mmdvm_enabled )); then systemctl enable ywd-mmdvmhost.service >/dev/null 2>&1 || true; else systemctl disable ywd-mmdvmhost.service >/dev/null 2>&1 || true; fi
+  if (( gateway_enabled )); then systemctl enable ywd-dmrgateway.service >/dev/null 2>&1 || true; else systemctl disable ywd-dmrgateway.service >/dev/null 2>&1 || true; fi
+  if (( dashboard_enabled )); then systemctl enable ywd-dashboard.service >/dev/null 2>&1 || true; else systemctl disable ywd-dashboard.service >/dev/null 2>&1 || true; fi
+  if (( oled_enabled )); then systemctl enable ywd-oled.service >/dev/null 2>&1 || true; else systemctl disable ywd-oled.service >/dev/null 2>&1 || true; fi
+  if (( activity_enabled )); then systemctl enable ywd-activity.service >/dev/null 2>&1 || true; else systemctl disable ywd-activity.service >/dev/null 2>&1 || true; fi
+  if (( dmrid_enabled )); then systemctl enable ywd-dmrid-update.timer >/dev/null 2>&1 || true; else systemctl disable ywd-dmrid-update.timer >/dev/null 2>&1 || true; fi
+
+  if (( activity_active )); then systemctl start ywd-activity.service >/dev/null 2>&1 || true; fi
+  if (( dmrid_active )); then systemctl start ywd-dmrid-update.timer >/dev/null 2>&1 || true; fi
+  if (( mmdvm_active )); then systemctl start ywd-mmdvmhost.service >/dev/null 2>&1 || true; fi
+  if (( gateway_active )); then sleep 1; systemctl start ywd-dmrgateway.service >/dev/null 2>&1 || true; fi
+  if (( dashboard_active )); then systemctl start ywd-dashboard.service >/dev/null 2>&1 || true; fi
+  if (( oled_active )); then systemctl start ywd-oled.service >/dev/null 2>&1 || true; fi
+
+  echo "Previous installation restored. Backup retained at: $backup_dir"
+  exit "$rc"
+}
+trap rollback ERR INT TERM
+
+echo "Installing $VERSION runtime files..."
 for g in dialout i2c systemd-journal; do
   getent group "$g" >/dev/null 2>&1 && usermod -a -G "$g" ywd-hotspot || true
 done
@@ -50,13 +112,21 @@ install -d -o ywd-hotspot -g ywd-hotspot -m 0750 /var/lib/ywd-hotspot /var/lib/y
 install -d -o root -g root -m 0700 /var/lib/ywd-hotspot/private /var/lib/ywd-hotspot/private/config-history
 rm -rf /opt/ywd-hotspot/app
 install -d -m 0755 /opt/ywd-hotspot/app
-# Copy only appliance/runtime source. A Git checkout may contain a large .git
-# database plus repository docs/artwork that do not belong in /opt.
-for item in bin lib web systemd sudoers lab INSTALL.sh UPDATE.sh UNINSTALL.sh VERSION pins.env README.md MANIFEST.txt; do
-  cp -a "$SELF/$item" /opt/ywd-hotspot/app/
+
+# Copy only runtime/source files needed by the appliance. Keep the managed .git
+# checkout separate in /opt/ywd-hotspot/repo.
+for item in bin lib web systemd sudoers lab INSTALL.sh UPDATE.sh UNINSTALL.sh GITHUB-UPDATE.sh MIGRATE-TO-GITHUB.sh VERSION pins.env README.md MANIFEST.txt; do
+  [[ -e "$SELF/$item" ]] && cp -a "$SELF/$item" /opt/ywd-hotspot/app/
 done
 
-chmod +x /opt/ywd-hotspot/app/bin/ywd-hotspotctl /opt/ywd-hotspot/app/lib/*.py /opt/ywd-hotspot/app/lab/mmdvm-diag.sh
+# Ship only the small WebP badge to the appliance; keep the large master artwork
+# in the repository rather than wasting Pi storage/runtime backups.
+install -d -m 0755 /opt/ywd-hotspot/app/assets/branding
+install -m 0644 "$SELF/assets/branding/ywd-hotspot-badge-256.webp" /opt/ywd-hotspot/app/assets/branding/ywd-hotspot-badge-256.webp
+
+chmod +x /opt/ywd-hotspot/app/INSTALL.sh /opt/ywd-hotspot/app/UPDATE.sh /opt/ywd-hotspot/app/UNINSTALL.sh \
+  /opt/ywd-hotspot/app/GITHUB-UPDATE.sh /opt/ywd-hotspot/app/MIGRATE-TO-GITHUB.sh \
+  /opt/ywd-hotspot/app/bin/ywd-hotspotctl /opt/ywd-hotspot/app/lib/*.py /opt/ywd-hotspot/app/lab/mmdvm-diag.sh
 install -m 0755 /opt/ywd-hotspot/app/bin/ywd-hotspotctl /usr/local/sbin/ywd-hotspotctl
 install -o root -g root -m 0755 /opt/ywd-hotspot/app/lib/admin.py /usr/local/libexec/ywd-hotspot-admin
 install -o root -g root -m 0440 "$SELF/sudoers/ywd-hotspot" /etc/sudoers.d/ywd-hotspot
@@ -67,8 +137,8 @@ for unit in "$SELF"/systemd/*.service "$SELF"/systemd/*.timer; do
 done
 systemctl daemon-reload
 
-# Migrate Alpha2/Alpha3 schema to schema 3, then preserve the real pre-update
-# systemd boot policy as the canonical rf_autostart setting.
+# Migrate config schema, then preserve the real pre-update systemd boot policy as
+# the canonical rf_autostart setting.
 python3 /opt/ywd-hotspot/app/lib/migrate.py
 RF_ENABLED=$(( mmdvm_enabled && gateway_enabled )) python3 - <<'PY'
 import json, os
@@ -82,6 +152,10 @@ except Exception: pass
 os.replace(t,p)
 PY
 python3 /opt/ywd-hotspot/app/lib/generate-config.py
+
+# Record build provenance before the dashboard restarts. Environment variables
+# supplied by GITHUB-UPDATE.sh override archive/no-.git discovery.
+python3 /opt/ywd-hotspot/app/lib/build_info.py write --source-dir "$SELF" >/dev/null
 
 # Keep persistent crash evidence enabled when configured.
 read -r JOURNAL_ENABLED JOURNAL_MB < <(python3 - <<'PY'
@@ -111,15 +185,13 @@ systemctl restart systemd-journald.service || true
 # Mark the freshly generated configuration as the applied baseline.
 printf '{}\n' | /usr/local/libexec/ywd-hotspot-admin init-applied >/dev/null
 
-# ID updater is now a cheap 6-hour due-check; do not download if the local file
-# is still inside the configured age interval.
+# ID updater is a cheap due-check; do not download if the local file is fresh.
 python3 /opt/ywd-hotspot/app/lib/id-update.py || echo "[WARN] RadioID due-check/update failed; existing database retained."
-systemctl enable --now ywd-activity.service ywd-dmrid-update.timer
 
-# Preserve dashboard/OLED policy from Alpha3 rather than unexpectedly enabling
-# a service the operator had disabled.
-if (( dashboard_enabled || dashboard_active )); then systemctl enable ywd-dashboard.service >/dev/null 2>&1 || true; fi
-if (( oled_enabled || oled_active )); then systemctl enable ywd-oled.service >/dev/null 2>&1 || true; fi
+# Restart only side services that were already running. Enable/disable policy is
+# restored exactly below.
+if (( activity_active )); then systemctl restart ywd-activity.service; fi
+if (( dmrid_active )); then systemctl restart ywd-dmrid-update.timer; fi
 
 # Apply new units without ever starting an RF path that was previously stopped.
 if (( gateway_active )); then systemctl stop ywd-dmrgateway.service || true; fi
@@ -131,11 +203,17 @@ if (( oled_active )); then systemctl restart ywd-oled.service || true; fi
 # Restore pre-update enable/disable state exactly for RF.
 if (( mmdvm_enabled )); then systemctl enable ywd-mmdvmhost.service >/dev/null 2>&1; else systemctl disable ywd-mmdvmhost.service >/dev/null 2>&1 || true; fi
 if (( gateway_enabled )); then systemctl enable ywd-dmrgateway.service >/dev/null 2>&1; else systemctl disable ywd-dmrgateway.service >/dev/null 2>&1 || true; fi
+if (( dashboard_enabled )); then systemctl enable ywd-dashboard.service >/dev/null 2>&1; else systemctl disable ywd-dashboard.service >/dev/null 2>&1 || true; fi
+if (( oled_enabled )); then systemctl enable ywd-oled.service >/dev/null 2>&1; else systemctl disable ywd-oled.service >/dev/null 2>&1 || true; fi
+if (( activity_enabled )); then systemctl enable ywd-activity.service >/dev/null 2>&1; else systemctl disable ywd-activity.service >/dev/null 2>&1 || true; fi
+if (( dmrid_enabled )); then systemctl enable ywd-dmrid-update.timer >/dev/null 2>&1; else systemctl disable ywd-dmrid-update.timer >/dev/null 2>&1 || true; fi
 
+trap - ERR INT TERM
 sleep 2
 echo
 echo "Updated to $VERSION."
-echo "Alpha5 UI/location/calibration-prep features are available after refreshing the dashboard."
+echo "About/build provenance and GitHub-management support are now installed."
 echo "Persistent journal: $([[ "$JOURNAL_ENABLED" == 1 ]] && echo enabled || echo disabled)"
+echo "Backup retained: $backup_dir"
 echo
 ywd-hotspotctl status || true

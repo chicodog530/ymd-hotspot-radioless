@@ -1,4 +1,4 @@
-# YWD-Hotspot Alpha5: the unprivileged dashboard may invoke only these
+# YWD-Hotspot Alpha6: the unprivileged dashboard may invoke only these
 # validated root-helper actions. The helper itself is root-owned and contains
 # no arbitrary-command action.
 Cmnd_Alias YWDHOTSPOT_ADMIN = \
