@@ -131,8 +131,8 @@ git -C "$REPO_DIR" archive "$target_sha" | tar -x -C "$stage"
 required=(
   VERSION UPDATE.sh INSTALL.sh UNINSTALL.sh GITHUB-UPDATE.sh MIGRATE-TO-GITHUB.sh
   bin/ywd-hotspotctl lab/mmdvm-diag.sh
-  lib/dashboard.py lib/admin.py lib/build_info.py lib/generate-config.py lib/migrate.py
-  web/index.html web/app.js web/style.css
+  lib/dashboard.py lib/dashboard_core.py lib/admin.py lib/build_info.py lib/generate-config.py lib/migrate.py
+  web/index.html web/app.js web/app-core.js web/talkgroups.js web/style.css
   sudoers/ywd-hotspot systemd/ywd-mmdvmhost.service systemd/ywd-dmrgateway.service
   systemd/ywd-dashboard.service systemd/ywd-activity.service
   assets/branding/ywd-hotspot-badge-256.webp
