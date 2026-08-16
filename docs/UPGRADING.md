@@ -41,6 +41,41 @@ sudo ./MIGRATE-TO-GITHUB.sh
 
 Migration preserves configuration, credentials, calibration/history data and current RF active/enabled state. It does not rebuild MMDVM-Host or DMRGateway.
 
+## Alpha6 executable-bit migration hotfix
+
+The first Alpha6 migration script applied `chmod` to files inside `/opt/ywd-hotspot/repo`. Because those files were initially committed without executable mode, Git reported mode-only changes as local modifications and the safety guard correctly stopped the update.
+
+Current `main` fixes that behavior. The managed checkout no longer mutates tracked permissions, ignores executable-bit-only drift, and still refuses actual content changes.
+
+If migration stopped with a list similar to:
+
+```text
+ M GITHUB-UPDATE.sh
+ M INSTALL.sh
+ M MIGRATE-TO-GITHUB.sh
+ M UPDATE.sh
+ M bin/ywd-hotspotctl
+ M lib/dashboard.py
+```
+
+recover with:
+
+```bash
+sudo git -C /opt/ywd-hotspot/repo config core.fileMode false
+sudo git -C /opt/ywd-hotspot/repo status --short
+```
+
+For this specific bug, the second command should print nothing. If it still prints modified files, stop and inspect them before proceeding; the updater will not destroy genuine local content changes.
+
+When the status is clean, rerun the migration from the clone you originally used:
+
+```bash
+cd ~/tmp/ywd-hotspot
+sudo ./MIGRATE-TO-GITHUB.sh
+```
+
+The old launcher can safely complete the migration after `core.fileMode=false` because it will fetch the corrected `main` candidate. No MMDVM-Host or DMRGateway rebuild is required.
+
 ## Check for updates
 
 ```bash
@@ -104,13 +139,15 @@ The command asks for explicit confirmation before applying a candidate.
 1. acquires an update lock
 2. verifies `/opt/ywd-hotspot/repo`
 3. verifies the origin is the canonical YWD-Hotspot repository
-4. refuses a dirty checkout
+4. refuses a dirty checkout containing content changes
 5. fetches branches/tags
 6. resolves the target commit/version
 7. stages the commit separately
 8. validates the staged source
 9. invokes the normal transactional `UPDATE.sh`
 10. advances `/opt/ywd-hotspot/repo` only after the live update succeeds
+
+Executable-bit-only drift is ignored in the managed checkout; file-content changes are still treated as dirty and block updates.
 
 `UPDATE.sh` then:
 
@@ -159,13 +196,13 @@ Build provenance is stored in the non-secret file:
 
 ## Local changes in the managed checkout
 
-Updates intentionally refuse this condition:
+Updates intentionally refuse actual content changes reported by:
 
 ```bash
 git -C /opt/ywd-hotspot/repo status --short
 ```
 
-If it shows modifications, investigate them. The updater will not silently destroy local edits.
+If it shows modifications after mode-only drift has been ignored, investigate them. The updater will not silently destroy local edits.
 
 Application configuration should never be kept as source modifications in `/opt/ywd-hotspot/repo`; runtime configuration belongs under `/etc/ywd-hotspot`.
 
