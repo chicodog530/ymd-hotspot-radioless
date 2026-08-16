@@ -1,0 +1,20 @@
+[Unit]
+Description=YWD Hotspot MMDVM-Host
+After=network.target
+ConditionPathExists=/etc/ywd-hotspot/MMDVM-Host.ini
+StartLimitIntervalSec=60
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=ywd-hotspot
+Group=ywd-hotspot
+SupplementaryGroups=dialout
+ExecStart=/usr/local/bin/MMDVM-Host /etc/ywd-hotspot/MMDVM-Host.ini
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+OOMScoreAdjust=-200
+
+[Install]
+WantedBy=multi-user.target

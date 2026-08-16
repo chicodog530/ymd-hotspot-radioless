@@ -1,0 +1,12 @@
+[Unit]
+Description=Periodic YWD Hotspot DMR ID database due-check
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=6h
+RandomizedDelaySec=30min
+Persistent=true
+Unit=ywd-dmrid-update.service
+
+[Install]
+WantedBy=timers.target

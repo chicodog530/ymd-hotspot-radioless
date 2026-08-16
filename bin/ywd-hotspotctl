@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+set -euo pipefail
+APP=/opt/ywd-hotspot/app
+CFG=/etc/ywd-hotspot/config.json
+ADMIN=/usr/local/libexec/ywd-hotspot-admin
+
+need_root(){ [[ $EUID -eq 0 ]] || { echo "Run with sudo: sudo ywd-hotspotctl $*"; exit 1; }; }
+
+status(){
+  echo "YWD Hotspot $(cat "$APP/VERSION" 2>/dev/null || echo unknown)"
+  printf "%-18s %s\n" "MMDVMHost" "$(systemctl is-active ywd-mmdvmhost.service 2>/dev/null || true)"
+  printf "%-18s %s\n" "DMRGateway" "$(systemctl is-active ywd-dmrgateway.service 2>/dev/null || true)"
+  printf "%-18s %s\n" "Dashboard" "$(systemctl is-active ywd-dashboard.service 2>/dev/null || true)"
+  printf "%-18s %s\n" "Activity" "$(systemctl is-active ywd-activity.service 2>/dev/null || true)"
+  printf "%-18s %s\n" "OLED" "$(systemctl is-active ywd-oled.service 2>/dev/null || true)"
+  python3 - <<'PY'
+import json,hashlib
+from pathlib import Path
+try:
+ c=json.load(open('/etc/ywd-hotspot/config.json')); s=c['station']; r=c['radio']; b=c['brandmeister']; w=c['web']; m=c.get('maintenance',{})
+ print(f"{'Callsign':18} {s.get('callsign','?')}")
+ print(f"{'Hotspot ID':18} {s.get('hotspot_id','?')}")
+ print(f"{'Frequency':18} {r.get('frequency_hz',0)/1e6:.6f} MHz")
+ print(f"{'Color Code':18} {r.get('color_code','?')}")
+ print(f"{'RX/TX Offset':18} {r.get('rx_offset',0)} / {r.get('tx_offset',0)} Hz")
+ print(f"{'BM Master':18} {b.get('master','?')}")
+ print(f"{'RF autostart':18} {'enabled' if m.get('rf_autostart',False) else 'disabled'}")
+ print(f"{'Dashboard':18} http://PI-IP:{w.get('port',8080)}/")
+except Exception as e: print('Config:',e)
+PY
+  ip="$(hostname -I 2>/dev/null | awk '{print $1}')"; [[ -n "$ip" ]] && printf "%-18s %s\n" "IP" "$ip"
+  command -v vcgencmd >/dev/null && printf "%-18s %s\n" "Throttle" "$(vcgencmd get_throttled 2>/dev/null || true)"
+  [[ -x "$APP/lib/brandmeister.py" ]] && printf "%-18s %s\n" "BM API Key" "$(python3 "$APP/lib/brandmeister.py" key-status 2>/dev/null || echo unknown)"
+  [[ -x "$APP/lib/web_auth.py" ]] && printf "%-18s %s\n" "Web Controls" "$(python3 "$APP/lib/web_auth.py" status 2>/dev/null || echo unknown)"
+  if [[ -r /var/lib/ywd-hotspot/applied-state.json ]]; then
+    python3 - <<'PY'
+import json,sys
+sys.path.insert(0,'/opt/ywd-hotspot/app/lib'); import config_model
+c=config_model.normalize(json.load(open('/etc/ywd-hotspot/config.json'))); a=json.load(open('/var/lib/ywd-hotspot/applied-state.json'))
+print(f"{'Config applied':18} {'yes' if a.get('hash')==config_model.hash_config(c,False) else 'NO - pending changes'}")
+PY
+  fi
+}
+
+logs(){ echo "=== MMDVM-Host ==="; journalctl -u ywd-mmdvmhost.service -n 100 --no-pager -o cat; echo; echo "=== DMRGateway ==="; journalctl -u ywd-dmrgateway.service -n 100 --no-pager -o cat; echo; echo "=== Dashboard ==="; journalctl -u ywd-dashboard.service -n 60 --no-pager -o cat; }
+
+lastheard(){
+  python3 - <<'PY'
+import json
+from pathlib import Path
+try: rows=json.loads(Path('/var/lib/ywd-hotspot/lastheard.json').read_text())
+except Exception: rows=[]
+print(f"{'PATH':8} {'SLOT':4} {'SOURCE':12} {'DESTINATION':16} {'DUR':7} {'BER':7} {'LOSS/RSSI'}")
+for x in rows[:30]:
+ src=(x.get('source') or {}).get('display','?'); d=x.get('destination') or {}; dst=('TG ' if d.get('group') else 'PC ')+str(d.get('display','?'))
+ dur='—' if x.get('duration_s') is None else f"{x['duration_s']:.1f}s"; ber='—' if x.get('ber_pct') is None else f"{x['ber_pct']:.1f}%"
+ q=f"loss {x['packet_loss_pct']:.0f}%" if x.get('packet_loss_pct') is not None else (f"{x['rssi_dbm']} dBm" if x.get('rssi_dbm') is not None else '—')
+ print(f"{x.get('path','?'):8} {str(x.get('slot','?')):4} {src[:12]:12} {dst[:16]:16} {dur:7} {ber:7} {q}")
+PY
+}
+
+set_autostart(){
+  local v="$1"
+  python3 - "$v" <<'PY'
+import json,os,sys
+from pathlib import Path
+p=Path('/etc/ywd-hotspot/config.json'); c=json.load(open(p)); c.setdefault('maintenance',{})['rf_autostart']=sys.argv[1]=='1'; t=p.with_suffix('.tmp'); t.write_text(json.dumps(c,indent=2)+'\n'); os.chmod(t,0o640)
+try:
+ import grp; os.chown(t,0,grp.getgrnam('ywd-hotspot').gr_gid)
+except Exception: pass
+os.replace(t,p)
+PY
+}
+
+restart_running(){ need_root restart; python3 "$APP/lib/generate-config.py"; echo "Restarting only currently-running services..."; ga=0; systemctl is-active --quiet ywd-dmrgateway.service && ga=1 || true; ((ga)) && systemctl stop ywd-dmrgateway.service || true; systemctl try-restart ywd-mmdvmhost.service || true; ((ga)) && { sleep 1; systemctl start ywd-dmrgateway.service; }; systemctl try-restart ywd-activity.service ywd-oled.service || true; status; }
+start_rf(){ need_root start; echo "Verify antenna/frequency before RF start."; read -r -p "Type ENABLE-RF to start AND enable RF at boot: " a; [[ "$a" == ENABLE-RF ]] || { echo Cancelled.; return; }; set_autostart 1; python3 "$APP/lib/generate-config.py"; systemctl enable --now ywd-mmdvmhost.service; sleep 1; systemctl enable --now ywd-dmrgateway.service; printf '{}\n' | "$ADMIN" init-applied >/dev/null; status; }
+stop_rf(){ need_root stop; systemctl disable --now ywd-dmrgateway.service ywd-mmdvmhost.service || true; set_autostart 0; printf '{}\n' | "$ADMIN" init-applied >/dev/null; echo "RF/network path stopped and disabled at boot."; }
+backup(){ need_root backup; mkdir -p /var/backups/ywd-hotspot; out="/var/backups/ywd-hotspot/ywd-hotspot-$(date +%Y%m%d-%H%M%S).tar.gz"; tar -czf "$out" /etc/ywd-hotspot 2>/dev/null; chmod 600 "$out"; echo "Backup: $out"; echo "NOTE: protected backup contains credentials."; }
+configure(){ need_root configure; python3 "$APP/lib/configure.py"; }
+apply_config(){ need_root apply; echo '{}' | "$ADMIN" config-apply | python3 -m json.tool; }
+health(){ python3 "$APP/lib/health.py"; }
+diagnostics(){ need_root diagnostics; echo '{}' | "$ADMIN" diagnostics | python3 -m json.tool; }
+history(){ [[ -r /var/lib/ywd-hotspot/config-history.json ]] && python3 -m json.tool /var/lib/ywd-hotspot/config-history.json || echo "No config history yet."; }
+lab(){ need_root lab; "$APP/lab/mmdvm-diag.sh"; }
+bm_api_key(){ need_root bm-api-key; python3 "$APP/lib/brandmeister.py" set-key; systemctl try-restart ywd-dashboard.service 2>/dev/null || true; }
+web_password(){ need_root web-password; python3 "$APP/lib/web_auth.py" set; systemctl try-restart ywd-dashboard.service 2>/dev/null || true; }
+update_ids(){ need_root update-ids; python3 "$APP/lib/id-update.py" --force; }
+
+bm(){ local cmd="${1:-profile}"; shift || true; need_root bm; case "$cmd" in profile) python3 "$APP/lib/brandmeister.py" profile;; dropqso) python3 "$APP/lib/brandmeister.py" dropqso 0;; dropdyn) python3 "$APP/lib/brandmeister.py" dropdyn 0;; addtg) [[ "${1:-}" =~ ^[0-9]+$ ]] || { echo "Usage: bm addtg TG"; return 2; }; python3 "$APP/lib/brandmeister.py" addtg "$1" 0;; deltg) [[ "${1:-}" =~ ^[0-9]+$ ]] || { echo "Usage: bm deltg TG"; return 2; }; python3 "$APP/lib/brandmeister.py" deltg "$1" 0;; *) echo "Usage: bm {profile|dropqso|dropdyn|addtg TG|deltg TG}"; return 2;; esac; }
+
+menu(){ while true; do clear; echo "========================================"; echo " YWD Hotspot Control - Alpha5"; echo "========================================"; cat <<'EOF'
+ 1) Status                 9) Stop/disable RF
+ 2) Last Heard            10) Configure BM API key
+ 3) Logs                  11) Configure web password
+ 4) Restart running stack 12) Update DMR IDs now
+ 5) Configure (CLI)       13) Drop current BM QSO
+ 6) Apply saved config    14) Drop all dynamic TGs
+ 7) Health                15) Create diagnostic bundle
+ 8) Start/enable RF       16) Config history
+17) Hardware Lab
+ 0) Exit
+EOF
+ read -r -p "Select: " n; case "$n" in 1)status;;2)lastheard;;3)logs;;4)restart_running;;5)configure;;6)apply_config;;7)health;;8)start_rf;;9)stop_rf;;10)bm_api_key;;11)web_password;;12)update_ids;;13)bm dropqso;;14)bm dropdyn;;15)diagnostics;;16)history;;17)lab;continue;;0)return;;esac; read -r -p "Enter..." _; done; }
+
+cmd="${1:-menu}"; shift || true
+case "$cmd" in status)status;; logs)logs;; lastheard)lastheard;; restart)restart_running;; configure)configure;; apply)apply_config;; health)health;; diagnostics)diagnostics;; history)history;; lab)lab;; backup)backup;; start)start_rf;; stop)stop_rf;; bm-api-key)bm_api_key;; web-password)web_password;; update-ids)update_ids;; bm)bm "$@";; version)cat "$APP/VERSION";; menu|"")menu;; *) echo "Usage: ywd-hotspotctl {status|logs|lastheard|restart|configure|apply|health|diagnostics|history|lab|backup|start|stop|bm-api-key|web-password|update-ids|bm|version}"; exit 2;; esac

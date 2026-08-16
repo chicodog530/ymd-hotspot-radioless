@@ -1,0 +1,25 @@
+[Unit]
+Description=YWD Hotspot live DMR activity collector
+After=systemd-journald.service
+StartLimitIntervalSec=60
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=ywd-hotspot
+Group=ywd-hotspot
+SupplementaryGroups=systemd-journal
+RuntimeDirectory=ywd-hotspot
+RuntimeDirectoryMode=0750
+ExecStart=/usr/bin/python3 /opt/ywd-hotspot/app/lib/activity.py
+Restart=on-failure
+RestartSec=2
+MemoryMax=48M
+OOMScoreAdjust=150
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/ywd-hotspot /run/ywd-hotspot
+
+[Install]
+WantedBy=multi-user.target

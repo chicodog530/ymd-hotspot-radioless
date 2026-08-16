@@ -1,0 +1,20 @@
+# YWD-Hotspot Alpha5: the unprivileged dashboard may invoke only these
+# validated root-helper actions. The helper itself is root-owned and contains
+# no arbitrary-command action.
+Cmnd_Alias YWDHOTSPOT_ADMIN = \
+ /usr/local/libexec/ywd-hotspot-admin config-save, \
+ /usr/local/libexec/ywd-hotspot-admin config-apply, \
+ /usr/local/libexec/ywd-hotspot-admin config-revert, \
+ /usr/local/libexec/ywd-hotspot-admin set-hotspot-password, \
+ /usr/local/libexec/ywd-hotspot-admin set-bm-api-key, \
+ /usr/local/libexec/ywd-hotspot-admin set-web-password, \
+ /usr/local/libexec/ywd-hotspot-admin rf-start, \
+ /usr/local/libexec/ywd-hotspot-admin rf-stop, \
+ /usr/local/libexec/ywd-hotspot-admin rf-restart, \
+ /usr/local/libexec/ywd-hotspot-admin service-restart, \
+ /usr/local/libexec/ywd-hotspot-admin reboot, \
+ /usr/local/libexec/ywd-hotspot-admin diagnostics, \
+ /usr/local/libexec/ywd-hotspot-admin calibration-baseline-save, \
+ /usr/local/libexec/ywd-hotspot-admin calibration-baseline-restore
+
+ywd-hotspot ALL=(root) NOPASSWD: YWDHOTSPOT_ADMIN

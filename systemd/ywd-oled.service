@@ -1,0 +1,23 @@
+[Unit]
+Description=YWD Hotspot OLED status display
+After=ywd-activity.service
+Wants=ywd-activity.service
+StartLimitIntervalSec=60
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=ywd-hotspot
+Group=ywd-hotspot
+SupplementaryGroups=i2c
+ExecStart=/usr/bin/python3 /opt/ywd-hotspot/app/lib/oled.py
+Restart=on-failure
+RestartSec=5
+MemoryMax=48M
+OOMScoreAdjust=300
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

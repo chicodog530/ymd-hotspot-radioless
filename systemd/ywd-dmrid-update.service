@@ -1,0 +1,16 @@
+[Unit]
+Description=YWD Hotspot RadioID DMR ID database update
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/usr/bin/python3 /opt/ywd-hotspot/app/lib/id-update.py
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

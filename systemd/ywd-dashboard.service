@@ -1,0 +1,24 @@
+[Unit]
+Description=YWD Hotspot dashboard and authenticated control API
+After=network.target ywd-activity.service
+Wants=ywd-activity.service
+StartLimitIntervalSec=60
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=ywd-hotspot
+Group=ywd-hotspot
+SupplementaryGroups=systemd-journal
+ExecStart=/usr/bin/python3 /opt/ywd-hotspot/app/lib/dashboard.py
+Restart=on-failure
+RestartSec=3
+MemoryMax=128M
+OOMScoreAdjust=250
+PrivateTmp=true
+# Alpha5 deliberately does not set NoNewPrivileges/ProtectSystem here: the
+# authenticated dashboard must invoke the tightly-scoped sudoers helper.
+# Privilege is limited by /etc/sudoers.d/ywd-hotspot and admin.py validation.
+
+[Install]
+WantedBy=multi-user.target

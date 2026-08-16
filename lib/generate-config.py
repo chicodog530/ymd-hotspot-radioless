@@ -1,0 +1,267 @@
+#!/usr/bin/env python3
+"""Generate upstream MMDVM-Host and DMRGateway INI files from canonical config."""
+import json
+import os
+import re
+import sys
+from pathlib import Path
+
+import config_model
+
+CFG = Path(os.environ.get("YWD_CONFIG", "/etc/ywd-hotspot/config.json"))
+OUT = Path(os.environ.get("YWD_CONFIG_DIR", "/etc/ywd-hotspot"))
+DMRIDS = Path(os.environ.get("YWD_DMRID_FILE", "/var/lib/ywd-hotspot/DMRIds.dat"))
+
+
+def clean(v):
+    return str(v).replace("\n", " ").replace("\r", " ")
+
+
+def write_secure(path: Path, text: str):
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(text)
+    os.chmod(tmp, 0o640)
+    try:
+        import grp
+        os.chown(tmp, 0, grp.getgrnam("ywd-hotspot").gr_gid)
+    except Exception:
+        pass
+    os.replace(tmp, path)
+
+
+def render(c):
+    s, r, b = c["station"], c["radio"], c["brandmeister"]
+    hid = int(s["hotspot_id"])
+    callsign = clean(s["callsign"])
+    freq = int(r["frequency_hz"])
+    cc = int(r["color_code"])
+    master = clean(b["master"])
+    name = "BM_" + re.sub(r"[^A-Za-z0-9_-]+", "_", master.split(".")[0])
+    pw = clean(b.get("password", ""))
+    if '"' in pw:
+        raise ValueError("Password contains unsupported double quote")
+    lat = float(s.get("latitude", 0.0)); lon = float(s.get("longitude", 0.0))
+    location_data = 0 if abs(lat) < 1e-9 and abs(lon) < 1e-9 else 1
+
+    mmdvm = f"""[General]
+Callsign={callsign}
+Id={hid}
+Timeout={int(r.get('timeout_s',180))}
+Duplex=0
+RFModeHang=10
+NetModeHang=3
+Daemon=0
+
+[Log]
+MQTTLevel=0
+DisplayLevel=1
+
+[CW Id]
+Enable=0
+Time=10
+
+[DMR Id Lookup]
+File={DMRIDS}
+Time=24
+
+[Modem]
+Protocol=uart
+UARTPort={clean(r.get('uart','/dev/serial0'))}
+UARTSpeed={int(r.get('uart_speed',115200))}
+RXFrequency={freq}
+TXFrequency={freq}
+TXInvert={int(r.get('tx_invert',1))}
+RXInvert={int(r.get('rx_invert',0))}
+PTTInvert=0
+TXDelay=100
+RXOffset={int(r.get('rx_offset',0))}
+TXOffset={int(r.get('tx_offset',0))}
+DMRDelay=0
+RXLevel={int(r.get('rx_level',50))}
+TXLevel={int(r.get('tx_level',50))}
+RXDCOffset=0
+TXDCOffset=0
+RFLevel={int(r.get('rf_level',100))}
+DMRTXLevel={int(r.get('tx_level',50))}
+UseCOSAsLockout=0
+Trace=0
+Debug=0
+
+[D-Star]
+Enable=0
+
+[DMR]
+Enable=1
+Beacons=0
+BeaconInterval=60
+BeaconDuration=3
+ColorCode={cc}
+SelfOnly=0
+EmbeddedLCOnly=0
+DumpTAData=1
+CallHang={int(r.get('call_hang_s',3))}
+TXHang={int(r.get('tx_hang_s',4))}
+Protect=0
+
+[System Fusion]
+Enable=0
+
+[P25]
+Enable=0
+
+[NXDN]
+Enable=0
+
+[POCSAG]
+Enable=0
+
+[FM]
+Enable=0
+
+[D-Star Network]
+Enable=0
+
+[DMR Network]
+Enable=1
+LocalAddress=127.0.0.1
+LocalPort=62032
+GatewayAddress=127.0.0.1
+GatewayPort=62031
+Jitter={int(r.get('jitter_ms',360))}
+Slot1=0
+Slot2=1
+Debug=0
+
+[System Fusion Network]
+Enable=0
+
+[P25 Network]
+Enable=0
+
+[NXDN Network]
+Enable=0
+
+[POCSAG Network]
+Enable=0
+
+[FM Network]
+Enable=0
+
+[Lock File]
+Enable=0
+
+[Remote Control]
+Enable=0
+"""
+
+    dmrgw = f"""[General]
+Id={hid}
+Timeout=10
+RptAddress=127.0.0.1
+RptPort=62032
+LocalAddress=127.0.0.1
+LocalPort=62031
+RuleTrace=0
+Daemon=0
+TrunkingEnabled=0
+Debug=0
+
+[Log]
+DisplayLevel=1
+MQTTLevel=0
+
+[Voice]
+Enabled=0
+
+[Info]
+Callsign={callsign}
+TXFrequency={freq}
+RXFrequency={freq}
+Power=1
+ColorCode={cc}
+Duplex=0
+Slot1=0
+Slot2=1
+Latitude={lat}
+Longitude={lon}
+Height={int(s.get('height',0))}
+Location={clean(s.get('location','Hotspot'))}
+Description={clean(s.get('description','YWD Hotspot'))}
+URL={clean(s.get('url',''))}
+
+[XLX Network]
+Enabled=0
+
+[DMR Network 1]
+Enabled={1 if b.get('enabled', True) else 0}
+Name={name}
+Id={hid}
+Address={master}
+Port={int(b.get('port',62031))}
+PassAllTG=2
+PassAllPC=2
+Password="{pw}"
+Location={location_data}
+Debug=0
+
+[DMR Network 2]
+Enabled=0
+
+[DMR Network 3]
+Enabled=0
+
+[DMR Network 4]
+Enabled=0
+
+[DMR Network 5]
+Enabled=0
+
+[GPSD]
+Enable=0
+Address=127.0.0.1
+Port=2947
+
+[APRS]
+Enable=0
+Description=YWD Hotspot
+Suffix=3
+
+[MQTT]
+Address=127.0.0.1
+Port=1883
+Keepalive=60
+Auth=0
+Name=dmr-gateway
+
+[Dynamic TG Control]
+Enable=0
+
+[Remote Commands]
+Enable=0
+"""
+    return mmdvm, dmrgw, location_data
+
+
+def main():
+    # Production writes require root, but test output directories are allowed when explicitly overridden.
+    if os.geteuid() != 0 and str(OUT).startswith("/etc/"):
+        raise SystemExit("generate-config.py must run as root")
+    raw = json.loads(CFG.read_text())
+    c = config_model.normalize(raw)
+    mmdvm, dmrgw, location_data = render(c)
+    OUT.mkdir(parents=True, exist_ok=True)
+    write_secure(OUT / "MMDVM-Host.ini", mmdvm)
+    write_secure(OUT / "DMRGateway.ini", dmrgw)
+    print("Generated:")
+    print(f"  {OUT / 'MMDVM-Host.ini'}")
+    print(f"  {OUT / 'DMRGateway.ini'}")
+    if location_data == 0:
+        print("  BrandMeister location data disabled because coordinates are 0,0.")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (ValueError, KeyError, json.JSONDecodeError) as e:
+        print(f"[FAIL] configuration: {e}", file=sys.stderr)
+        raise SystemExit(2)

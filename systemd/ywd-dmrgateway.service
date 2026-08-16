@@ -1,0 +1,21 @@
+[Unit]
+Description=YWD Hotspot DMRGateway
+After=network-online.target ywd-mmdvmhost.service
+Wants=network-online.target
+Requires=ywd-mmdvmhost.service
+ConditionPathExists=/etc/ywd-hotspot/DMRGateway.ini
+StartLimitIntervalSec=60
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=ywd-hotspot
+Group=ywd-hotspot
+ExecStart=/usr/local/bin/DMRGateway /etc/ywd-hotspot/DMRGateway.ini
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+OOMScoreAdjust=-150
+
+[Install]
+WantedBy=multi-user.target
