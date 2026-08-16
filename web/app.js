@@ -8,5 +8,5 @@
     s.onerror = () => console.error(`YWD-Hotspot failed to load ${src}`);
     document.head.appendChild(s);
   }
-  load('/app-core.js', () => load('/talkgroups.js'));
+  load('/app-core.js', () => load('/talkgroups.js', () => load('/ui-polish.js')));
 })();
