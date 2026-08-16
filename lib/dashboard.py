@@ -193,6 +193,9 @@ class H(core.H):
         if path == "/ui-polish.js":
             self.serve_static("ui-polish.js", "application/javascript; charset=utf-8")
             return
+        if path == "/ui-polish.css":
+            self.serve_static("ui-polish.css", "text/css; charset=utf-8")
+            return
         if path == "/api/talkgroups/search":
             qs = parse_qs(parsed.query, keep_blank_values=False)
             query = str((qs.get("q") or [""])[0])[:80]

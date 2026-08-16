@@ -1,4 +1,8 @@
-# GitHub Repository / Development Notes
+# 🌿 GitHub / Development Notes
+
+[← Docs index](README.md) · [Project README](../README.md) · [Contributing](../CONTRIBUTING.md) · [Upgrading](UPGRADING.md)
+
+---
 
 Canonical repository:
 
@@ -6,100 +10,172 @@ Canonical repository:
 https://github.com/merberg-ai/ywd-hotspot
 ```
 
-Default development branch:
+## 🌳 Branch model
 
-```text
-main
-```
+| Branch | Purpose |
+|---|---|
+| `main` | promoted/conservative project line |
+| `dev` | active development and Pi test line |
+| `dev-alpha9.2-known-good` | checkpoint of the user-tested Alpha9.2 polish build |
 
-## Clone
+During alpha development, new work lands on `dev` first. A build is promoted only after it has been exercised on the actual hotspot hardware.
+
+## 📥 Clone
+
+Promoted line:
 
 ```bash
 git clone https://github.com/merberg-ai/ywd-hotspot.git
 cd ywd-hotspot
 ```
 
-Normalize executable bits when working from a ZIP/Windows copy:
+Development line:
 
 ```bash
-chmod +x INSTALL.sh UPDATE.sh UNINSTALL.sh GITHUB-UPDATE.sh MIGRATE-TO-GITHUB.sh
-chmod +x bin/ywd-hotspotctl lab/mmdvm-diag.sh lib/*.py
+git clone --branch dev https://github.com/merberg-ai/ywd-hotspot.git
+cd ywd-hotspot
 ```
 
-For Git commits from Linux/WSL/Pi, preserve executable bits:
+Normal Git clones preserve executable modes. If source came through a ZIP/Windows copy and modes were lost, running entry scripts through Bash is sufficient for recovery, for example:
 
 ```bash
-git update-index --chmod=+x INSTALL.sh UPDATE.sh UNINSTALL.sh GITHUB-UPDATE.sh MIGRATE-TO-GITHUB.sh
-git update-index --chmod=+x bin/ywd-hotspotctl lab/mmdvm-diag.sh
-git update-index --chmod=+x lib/*.py
+sudo bash ./INSTALL.sh
 ```
 
-`.gitattributes` forces important text/source files to LF endings.
+`.gitattributes` keeps important text/source on LF endings.
 
-## Runtime source model
+## 🧱 Source vs deployed runtime
 
-A deployed hotspot does not run directly out of `.git`:
+A hotspot does not run directly from a mutable Git tree:
 
 ```text
-/opt/ywd-hotspot/repo    managed Git checkout
+/opt/ywd-hotspot/repo    managed Git source checkout
 /opt/ywd-hotspot/app     deployed runtime copy
 ```
 
-This separation is deliberate. Git/network operations occur before the deployed runtime is changed.
+This separation lets YWD-Hotspot fetch and validate a candidate before touching the running application.
 
-`/etc/ywd-hotspot/build-info.json` records the branch/ref, commit, commit date and source state used for the deployed runtime. The WebUI header/About page and `ywd-hotspotctl source` expose that non-secret provenance.
+Non-secret source provenance is recorded in:
 
-## Do not commit runtime secrets
+```text
+/etc/ywd-hotspot/build-info.json
+```
 
-Never commit or attach:
+and displayed by:
+
+```bash
+ywd-hotspotctl source
+```
+
+as well as the WebUI header/About page.
+
+## 🔐 Never commit runtime secrets
+
+Do not commit or attach:
 
 - real `/etc/ywd-hotspot/config.json`
 - `/etc/ywd-hotspot/bm-api.key`
 - `/etc/ywd-hotspot/web-auth.json`
-- protected backups from `/var/backups/ywd-hotspot`
-- private runtime/config-history snapshots
-- arbitrary unsanitized diagnostic archives
+- `/var/lib/ywd-hotspot/private/`
+- protected `/var/backups/ywd-hotspot/` archives
+- arbitrary unsanitized diagnostics
 
 Runtime configuration belongs outside the repository under `/etc/ywd-hotspot` and `/var/lib/ywd-hotspot`.
 
-## Basic validation before pushing
+## ✅ Basic validation before pushing
+
+Shell entry points:
 
 ```bash
-bash -n INSTALL.sh UPDATE.sh UNINSTALL.sh GITHUB-UPDATE.sh MIGRATE-TO-GITHUB.sh
-bash -n bin/ywd-hotspotctl lab/mmdvm-diag.sh
+bash -n \
+  INSTALL.sh INSTALL-core.sh \
+  UPDATE.sh UPDATE-core.sh \
+  GITHUB-UPDATE.sh GITHUB-UPDATE-core.sh \
+  MIGRATE-TO-GITHUB.sh MIGRATE-TO-GITHUB-core.sh \
+  UNINSTALL.sh \
+  bin/ywd-hotspotctl bin/ywd-hotspotctl-core bin/ywd-ui.sh \
+  lab/mmdvm-diag.sh
+```
+
+Python:
+
+```bash
 python3 -m py_compile lib/*.py
 ```
 
-If Node.js happens to be installed in the development environment, syntax-check the dashboard JavaScript too:
+If Node.js is available in the development environment:
 
 ```bash
 node --check web/app.js
+node --check web/app-core.js
+node --check web/talkgroups.js
+node --check web/ui-polish.js
 ```
 
-Changes to systemd, sudoers, config generation, install/update or RF behavior still need an actual Pi test before being treated as a known-good release.
+Changes touching systemd, sudoers, config generation, install/update, or RF behavior still require a real Pi test before being considered known-good.
 
-## Update-development warning
+## 🧪 Test-build workflow
 
-The deployment updater trusts only the canonical YWD-Hotspot origin and refuses dirty `/opt/ywd-hotspot/repo` working trees. Do not weaken those checks merely to make local experimentation easier.
+A practical development cycle is:
 
-For source hacking, use a normal development clone and manually apply a deliberate test build rather than modifying the managed production checkout.
+```text
+dev change
+   ↓
+static validation
+   ↓
+sudo ywd-hotspotctl update --check
+   ↓
+sudo ywd-hotspotctl update --dry-run
+   ↓
+Pi Zero hardware test
+   ↓
+checkpoint branch when confirmed
+   ↓
+promote to main only when deliberately approved
+```
 
-## Tags/releases
+Do not use `/opt/ywd-hotspot/repo` as a casual hacking tree. Work in a normal clone and let the managed updater keep its dirty-tree safety guard.
 
-`main` is the active development stream during alpha work. The update system also supports explicit tags:
+## 🛡️ Update trust boundary
+
+Keep these protections unless a stronger replacement is demonstrated:
+
+- canonical-origin verification
+- dirty-content refusal
+- candidate staging outside the live app
+- required-file/syntax validation
+- protected pre-update backup
+- RF-state preservation
+- managed checkout advanced only after successful deploy
+
+Convenience is not a good reason to make update failures destructive.
+
+## 📌 Upstream RF pins
+
+Do not casually combine an MMDVM-Host/DMRGateway pin move with unrelated UI/docs work. A radio-stack pin change changes the calibration baseline and should be isolated and regression-tested.
+
+Current pins live in:
+
+```text
+pins.env
+```
+
+## 🏷️ Tags and releases
+
+The updater supports explicit tags:
 
 ```bash
 sudo ywd-hotspotctl update --tag v0.1.0-alpha6
 ```
 
-Only create/tag a release as known-good after it has actually passed the project test checkpoint. `0.1.0-alpha4.1` remains the last explicitly confirmed known-good checkpoint unless a later build is separately confirmed.
+A checkpoint branch is useful while alpha builds are moving quickly; a release/tag should only be described as known-good after actual hardware testing.
 
-## Repository metadata
+## 🧾 Repository metadata
 
 Suggested description:
 
 ```text
-Lightweight Raspberry Pi + MMDVM DMR hotspot stack with BrandMeister controls, web UI, diagnostics, calibration and safe GitHub updates.
+Lightweight Raspberry Pi + MMDVM DMR hotspot stack with BrandMeister controls, responsive WebUI, calibration, diagnostics and safe GitHub updates.
 ```
 
 Suggested topics:
@@ -108,6 +184,6 @@ Suggested topics:
 ham-radio dmr mmdvm raspberry-pi raspberry-pi-zero brandmeister hotspot amateur-radio
 ```
 
-## License
+## 📄 License
 
-The repository includes the Unlicense/public-domain dedication in `LICENSE`.
+The repository uses the **[Unlicense](../LICENSE)** / public-domain dedication.

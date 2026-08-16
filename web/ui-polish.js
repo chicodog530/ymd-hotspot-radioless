@@ -2,10 +2,11 @@
 (() => {
   let modalResolve = null;
   let modalLastFocus = null;
+  let modalCloseTimer = null;
+  const reduceMotion = !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
   // Reuse the dashboard's existing CSP-approved modal/dialog/button styles.
-  // Do not inject a <style> block here: style-src 'self' intentionally blocks
-  // script-created inline CSS.
+  // Alpha10 adds motion/busy/toast polish through same-origin ui-polish.css.
   const overlay = document.createElement('div');
   overlay.className = 'modal';
   overlay.id = 'ywdConfirmModal';
@@ -23,13 +24,23 @@
     </div>`;
   document.body.append(overlay);
 
-  function closeModal(value) {
-    overlay.classList.remove('on');
-    const r = modalResolve;
-    modalResolve = null;
+  function finishModalClose(resolve, value) {
+    overlay.classList.remove('on', 'closing');
     if (modalLastFocus && typeof modalLastFocus.focus === 'function') modalLastFocus.focus();
     modalLastFocus = null;
-    if (r) r(value);
+    if (resolve) resolve(value);
+  }
+
+  function closeModal(value) {
+    const resolve = modalResolve;
+    modalResolve = null;
+    clearTimeout(modalCloseTimer);
+    if (!overlay.classList.contains('on') || reduceMotion) {
+      finishModalClose(resolve, value);
+      return;
+    }
+    overlay.classList.add('closing');
+    modalCloseTimer = setTimeout(() => finishModalClose(resolve, value), 125);
   }
 
   window.ywdConfirm = function({
@@ -40,7 +51,13 @@
     tone = 'normal',
     kicker = 'YWD // HOTSPOT'
   } = {}) {
-    if (modalResolve) closeModal(false);
+    if (modalResolve) {
+      const previous = modalResolve;
+      modalResolve = null;
+      previous(false);
+    }
+    clearTimeout(modalCloseTimer);
+    overlay.classList.remove('closing');
     modalLastFocus = document.activeElement;
     $('ywdModalTitle').textContent = title;
     $('ywdModalMessage').textContent = message;
@@ -50,7 +67,7 @@
     $('ywdModalKicker').className = 'card-title' + (tone === 'danger' ? ' badtext' : tone === 'warn' ? ' warntext2' : '');
     $('ywdModalConfirm').className = 'btn ' + (tone === 'danger' || tone === 'warn' ? 'danger' : 'primary');
     overlay.classList.add('on');
-    setTimeout(() => $('ywdModalConfirm').focus(), 30);
+    setTimeout(() => $('ywdModalConfirm').focus(), reduceMotion ? 0 : 30);
     return new Promise(resolve => { modalResolve = resolve; });
   };
 
@@ -67,16 +84,68 @@
     }
   });
 
-  function invokeWithNativeConfirmAccepted(el, ev) {
+  function beginBusy(el, label = 'WORKING…') {
+    if (!el || el.dataset.ywdBusy === '1') return () => {};
+    const previous = {
+      disabled: !!el.disabled,
+      text: el.textContent,
+      ariaBusy: el.getAttribute('aria-busy')
+    };
+    el.dataset.ywdBusy = '1';
+    el.disabled = true;
+    el.classList.add('ywd-working');
+    el.setAttribute('aria-busy', 'true');
+    if (label) el.textContent = label;
+    return () => {
+      delete el.dataset.ywdBusy;
+      el.classList.remove('ywd-working');
+      el.textContent = previous.text;
+      if (previous.ariaBusy == null) el.removeAttribute('aria-busy');
+      else el.setAttribute('aria-busy', previous.ariaBusy);
+      el.disabled = previous.disabled;
+      if (typeof setCtl === 'function') setCtl();
+    };
+  }
+
+  function runBusy(el, label, fn) {
+    const done = beginBusy(el, label);
+    let result;
+    try {
+      result = fn();
+    } catch (e) {
+      done();
+      throw e;
+    }
+    if (result && typeof result.then === 'function') {
+      return Promise.resolve(result).finally(done);
+    }
+    done();
+    return result;
+  }
+
+  function invokeWithNativeConfirmAccepted(el, ev, busyText = null) {
     const fn = el && el.onclick;
     if (typeof fn !== 'function') return;
-    const nativeConfirm = window.confirm;
-    window.confirm = () => true;
-    try {
-      return fn.call(el, ev);
-    } finally {
-      window.confirm = nativeConfirm;
-    }
+    const invoke = () => {
+      const nativeConfirm = window.confirm;
+      window.confirm = () => true;
+      try {
+        return fn.call(el, ev);
+      } finally {
+        window.confirm = nativeConfirm;
+      }
+    };
+    return busyText ? runBusy(el, busyText, invoke) : invoke();
+  }
+
+  function wrapWorking(id, label) {
+    const el = $(id);
+    if (!el || el.dataset.ywdWorkingWrapped === '1' || typeof el.onclick !== 'function') return;
+    const original = el.onclick;
+    el.dataset.ywdWorkingWrapped = '1';
+    el.onclick = function(ev) {
+      return runBusy(el, label, () => original.call(el, ev));
+    };
   }
 
   function detailsFor(el) {
@@ -85,42 +154,42 @@
     if (id === 'dropDyn' || id === 'tgDropDynamic') return {
       title: 'DROP DYNAMIC TALKGROUPS',
       message: 'Drop every dynamic talkgroup currently linked to this hotspot?\n\nStatic talkgroups are not removed.',
-      confirmText: 'DROP DYNAMIC', tone: 'warn'
+      confirmText: 'DROP DYNAMIC', tone: 'warn', busyText: 'DROPPING…'
     };
     if (id === 'startRf') return {
       title: 'START RF STACK',
       message: 'Start MMDVM-Host and the BrandMeister network path now?\n\nVerify the antenna and configured frequency before transmitting.',
-      confirmText: 'START RF', tone: 'warn'
+      confirmText: 'START RF', tone: 'warn', busyText: 'STARTING…'
     };
     if (id === 'stopRf') return {
       title: 'STOP RF STACK',
       message: 'Stop the active RF + BrandMeister stack now?\n\nThis runtime action does not rewrite unrelated configuration.',
-      confirmText: 'STOP RF', tone: 'warn'
+      confirmText: 'STOP RF', tone: 'warn', busyText: 'STOPPING…'
     };
     if (id === 'restartRf') return {
       title: 'RESTART RF STACK',
       message: 'Restart the currently running RF stack?\n\nA brief DMR interruption is expected.',
-      confirmText: 'RESTART', tone: 'warn'
+      confirmText: 'RESTART', tone: 'warn', busyText: 'RESTARTING…'
     };
     if (id === 'rebootPi') return {
       title: 'REBOOT RASPBERRY PI',
       message: 'Reboot the hotspot now?\n\nThe WebUI and DMR services will be unavailable while the Pi restarts.',
-      confirmText: 'REBOOT PI', tone: 'danger'
+      confirmText: 'REBOOT PI', tone: 'danger', busyText: 'REBOOTING…'
     };
     if (id === 'resetCal') return {
       title: 'NEW CALIBRATION SESSION',
       message: 'Clear the recorded calibration result table and start a new test?\n\nCurrent RF settings are not changed.',
-      confirmText: 'START NEW TEST', tone: 'warn'
+      confirmText: 'START NEW TEST', tone: 'warn', busyText: 'RESETTING…'
     };
     if (id === 'restoreBaseline') return {
       title: 'RESTORE CALIBRATION BASELINE',
       message: 'Restore the saved baseline modem/RF settings and apply them now?',
-      confirmText: 'RESTORE + APPLY', tone: 'warn'
+      confirmText: 'RESTORE + APPLY', tone: 'warn', busyText: 'RESTORING…'
     };
     if (id === 'calUseBest') return {
       title: 'USE RECOMMENDED RX OFFSET',
       message: 'Apply the currently recommended RX offset?\n\nThe configuration will be saved/applied and the active RF stack may restart.',
-      confirmText: 'USE BEST OFFSET', tone: 'warn'
+      confirmText: 'USE BEST OFFSET', tone: 'warn', busyText: 'APPLYING…'
     };
     if (id === 'tgApplyPlan') {
       const d = typeof tgDiff === 'function' ? tgDiff() : {add: [], remove: []};
@@ -130,28 +199,28 @@
       return {
         title: 'APPLY STATIC TALKGROUP PLAN',
         message: (rows.join('\n') || 'No changes planned.') + '\n\nChanges are sent to BrandMeister on simplex slot 0.',
-        confirmText: 'APPLY PLAN', tone: d.remove.length ? 'warn' : 'normal'
+        confirmText: 'APPLY PLAN', tone: d.remove.length ? 'warn' : 'normal', busyText: 'APPLYING…'
       };
     }
     if (el.matches('.calAdj')) return {
       title: 'ADJUST RX OFFSET',
       message: `Change RX offset by ${el.dataset.delta} Hz and restart the active RF stack?`,
-      confirmText: 'APPLY RX STEP', tone: 'warn'
+      confirmText: 'APPLY RX STEP', tone: 'warn', busyText: 'APPLYING…'
     };
     if (el.matches('.txAdj')) return {
       title: 'ADJUST TX OFFSET',
       message: `Change TX offset by ${el.dataset.delta} Hz and restart the active RF stack?`,
-      confirmText: 'APPLY TX STEP', tone: 'warn'
+      confirmText: 'APPLY TX STEP', tone: 'warn', busyText: 'APPLYING…'
     };
     if (el.matches('[data-del-tg]')) return {
       title: 'REMOVE STATIC TALKGROUP',
       message: `Remove static TG ${el.dataset.delTg} from BrandMeister?`,
-      confirmText: 'REMOVE TG', tone: 'warn'
+      confirmText: 'REMOVE TG', tone: 'warn', busyText: 'REMOVING…'
     };
     if (el.matches('[data-revert]')) return {
       title: 'RESTORE CONFIGURATION',
       message: 'Restore this saved configuration snapshot and apply it now?',
-      confirmText: 'RESTORE + APPLY', tone: 'warn'
+      confirmText: 'RESTORE + APPLY', tone: 'warn', busyText: 'RESTORING…'
     };
     if (el.matches('[data-set-del]')) {
       const s = typeof tgSets === 'function' ? tgSets()[Number(el.dataset.setDel)] : null;
@@ -205,6 +274,21 @@
     }
   };
 
+  // Add a small visible busy state to common async operations that do not need
+  // a confirmation dialog. Confirmed operations are handled below after consent.
+  [
+    ['dropQso', 'DROPPING…'],
+    ['addTg', 'ADDING…'],
+    ['restartOled', 'RESTARTING…'],
+    ['restartActivity', 'RESTARTING…'],
+    ['saveConfig', 'SAVING…'],
+    ['applyConfig', 'APPLYING…'],
+    ['recordCal', 'RECORDING…'],
+    ['saveBaseline', 'SAVING…'],
+    ['tgSearchBtn', 'SEARCHING…'],
+    ['tgRefreshDirectory', 'REFRESHING…']
+  ].forEach(([id, label]) => wrapWorking(id, label));
+
   // Capture dangerous/confirming actions before their existing onclick handlers.
   document.addEventListener('click', async e => {
     const el = e.target.closest('button,[data-revert],[data-del-tg],[data-set-del]');
@@ -249,6 +333,6 @@
     e.preventDefault();
     e.stopImmediatePropagation();
     const ok = await ywdConfirm(d);
-    if (ok) invokeWithNativeConfirmAccepted(el, e);
+    if (ok) invokeWithNativeConfirmAccepted(el, e, d.busyText || null);
   }, true);
 })();

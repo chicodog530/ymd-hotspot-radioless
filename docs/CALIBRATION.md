@@ -1,10 +1,16 @@
-# DMR Calibration Plan
+# 🧪 DMR Calibration
 
-`0.1.0-alpha7-dev` turns the existing calibration controls into a repeatable RX measurement workflow. The important rule remains unchanged: change **one variable at a time** and use repeatable transmissions.
+[← Docs index](README.md) · [Project README](../README.md) · [Architecture](ARCHITECTURE.md)
 
-Randomly sweeping RXOffset, TXOffset and levels together produces impressive-looking numbers and useless conclusions.
+---
 
-## Baseline
+The calibration workflow is designed around one rule:
+
+> **Change one variable at a time and use repeatable transmissions.**
+
+Randomly sweeping RXOffset, TXOffset, and levels together produces impressive-looking numbers and useless conclusions.
+
+## 🎯 Current baseline
 
 Before testing, preserve the current known baseline:
 
@@ -18,29 +24,29 @@ TXInvert = 1
 RXInvert = 0
 ```
 
-Use the WebUI **SAVE CALIBRATION BASELINE** control before changing values.
+Use **SAVE CALIBRATION BASELINE** before changing values.
 
-## RX comes first
+## 📥 RX comes first
 
 The hotspot can objectively measure RF BER for:
 
 ```text
-HT -> hotspot
+HT → hotspot
 ```
 
-That makes RXOffset the first calibration target.
+That makes **RXOffset** the first calibration target.
 
-Recommended test setup:
+Recommended setup:
 
 - use BrandMeister Parrot for repeatable voice tests
 - keep the handheld on low power
-- keep distance, orientation and location unchanged between runs
-- make several 5-10 second transmissions per offset
+- keep distance/orientation/location unchanged between runs
+- use several similar 5–10 second transmissions per offset
 - avoid touching RXLevel until RXOffset behavior is understood
 
-## Alpha7-dev sample rule
+## 📊 Sample rule
 
-The WebUI groups recorded calls by RXOffset and calculates:
+Recorded calls are grouped by RXOffset and summarized as:
 
 ```text
 sample count
@@ -49,49 +55,49 @@ best BER
 average RSSI
 ```
 
-A single low-BER packet is **not** enough to produce the apply recommendation. The current target is:
+A single low-BER packet is not enough to produce an apply recommendation.
+
+Current threshold:
 
 ```text
 3 samples per RX offset
 ```
 
-Until an offset has at least three samples, the UI may show it as a **provisional** best but will not enable **USE BEST RX OFFSET** for that group.
+Until an offset has at least three samples, the UI can show a **provisional** best but will not offer it as the supported recommendation.
 
-The recommended group is chosen primarily by the lowest average BER. Sample count and distance from zero are only tie-breakers; the software does not pretend those are additional RF quality measurements.
+The ranking uses lowest **average BER** first. Sample count and distance from zero are only tie-breakers; they are not additional RF quality measurements.
 
-## Controlled RXOffset sequence
+## 🧭 Controlled RXOffset sequence
 
 1. Save the calibration baseline.
 2. Start a new calibration session.
 3. Record at least three similar Parrot transmissions at RXOffset `0`.
-4. Note average BER, best BER and RSSI context.
-5. Change only RXOffset by a controlled step.
-6. Repeat the same number and approximate length of transmissions.
-7. Compare **average BER across repeated samples**, not one lucky packet.
+4. Note average BER, best BER, and RSSI context.
+5. Change **only RXOffset** by a controlled step.
+6. Repeat the same number/approximate duration of transmissions.
+7. Compare average BER across repeated samples.
 8. Continue around the improving region until the minimum is bracketed.
 9. Confirm the apparent best region with additional repeated tests.
-10. Use **USE BEST RX OFFSET** only after the recommendation is supported by enough samples.
-11. Only then consider RXLevel if BER is still poor.
+10. Use **USE BEST RX OFFSET** only after enough samples support the recommendation.
+11. Consider RXLevel only afterward if BER is still poor.
 
-Quick controls include ±100, ±250 and ±500 Hz changes. Each change still uses the normal configuration/apply path and restarts only the active RF stack as required.
+Quick controls include ±100, ±250, and ±500 Hz changes. Each change uses the normal configuration/apply path and restarts only the active RF stack as required.
 
-## Manual confirmation remains mandatory
+## ✅ Manual confirmation remains mandatory
 
-Alpha7-dev does not silently tune the modem.
+YWD-Hotspot does not silently tune the modem.
 
-When **USE BEST RX OFFSET** becomes available, it displays the recommended offset, sample count and average BER. Applying it requires an explicit browser confirmation, then uses the normal transactional config-save/config-apply flow.
+When **USE BEST RX OFFSET** becomes available, the UI shows the recommended offset, sample count, and average BER. Applying it requires explicit confirmation and uses the normal config-save/config-apply path.
 
-There is deliberately no corresponding automatic TX recommendation because the hotspot cannot measure the receiving handheld's BER.
+There is deliberately no automatic TX recommendation because the hotspot cannot measure the handheld receiver's BER.
 
-## CLI summary
-
-The same aggregate view is available from the terminal:
+## 💻 CLI summary
 
 ```bash
 ywd-hotspotctl calibration
 ```
 
-The command may transparently request sudo because calibration/config data is stored in protected appliance paths.
+The command may transparently request sudo because calibration/config data lives in protected appliance paths.
 
 Example shape:
 
@@ -101,56 +107,63 @@ RX OFFSET    N   AVG BER   BEST BER   AVG RSSI
          0    3    2.100%     1.600%      -53.0
 ```
 
-An asterisk marks the current recommendation.
+An asterisk marks the current supported recommendation.
 
-## Export results
+## 📤 Export results
 
-Calibration data contains no BrandMeister password, API key or web-control password.
+Calibration exports do not contain the BrandMeister password, API key, or WebUI control password.
 
-From the CLI:
+CLI:
 
 ```bash
 sudo ywd-hotspotctl calibration export json > calibration.json
 sudo ywd-hotspotctl calibration export csv  > calibration.csv
 ```
 
-The WebUI also provides **EXPORT JSON** and **EXPORT CSV** buttons. JSON contains raw samples plus the calculated aggregates/recommendation; CSV contains the individual recorded samples for outside analysis.
+The WebUI also provides **EXPORT JSON** and **EXPORT CSV**.
 
-## RSSI vs BER
+- JSON: raw samples + aggregate groups + recommendation metadata
+- CSV: individual recorded samples for external analysis
 
-RSSI is useful context but BER is the primary objective receive-quality measurement for this calibration. A strong-looking RSSI does not automatically mean the modem slicing/offset is optimal.
+## 📶 RSSI vs BER
 
-## RXLevel
+RSSI is useful context. BER is the primary objective receive-quality measurement for this workflow.
 
-Do not tune RXLevel merely because the control exists. First establish a repeatable RXOffset minimum. If BER remains unacceptable or behavior suggests level/slicer problems, change RXLevel separately and repeat the same controlled procedure.
+A strong-looking RSSI does not automatically mean modem slicing/offset is optimal.
 
-## TX calibration is different
+## 🎚️ RXLevel
+
+Do not tune RXLevel merely because the control exists.
+
+First establish a repeatable RXOffset minimum. If BER remains unacceptable or behavior suggests a level/slicer problem, change RXLevel separately and repeat the same controlled procedure.
+
+## 📤 TX calibration is different
 
 The hotspot cannot directly measure the handheld's receive BER for:
 
 ```text
-hotspot -> HT
+hotspot → HT
 ```
 
 TXOffset/TXLevel therefore require evidence from the receiving side, such as:
 
-- a handheld that displays useful BER/error information
+- a handheld that exposes useful BER/error information
 - a second suitable receiver/instrument
 - carefully controlled subjective playback when no better measurement exists
 
 Do not mix TX conclusions into the RX BER table.
 
-## Safety/stability during calibration
+## 🛡️ Stability during calibration
 
 The project previously experienced one unexplained hard reboot/lock event during DMR testing. No root cause was proven.
 
 During early calibration:
 
 - use the HT at low power
-- initially keep it roughly 10-15 ft from the Pi/HAT
+- initially keep it roughly 10–15 ft from the Pi/HAT
 - keep a ping running if practical
 - watch uptime
-- if the Pi reboots, inspect the previous persistent journal before doing more RF tests
+- if the Pi reboots, inspect the previous persistent journal before more RF tests
 
 Useful commands:
 

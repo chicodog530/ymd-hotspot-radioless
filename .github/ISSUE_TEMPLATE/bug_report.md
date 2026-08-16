@@ -1,50 +1,64 @@
 ---
-name: Bug report
+name: 🐛 Bug report
 about: Report a reproducible YWD-Hotspot problem
 title: "[BUG] "
 labels: bug
 ---
 
-## Version
+> [!IMPORTANT]
+> Do **not** attach reusable credentials, `/etc/ywd-hotspot`, protected backups, or unsanitized private runtime data.
 
-Output of:
+## 🧭 Version / source
+
+Paste:
 
 ```bash
 ywd-hotspotctl version
 ywd-hotspotctl source
 ```
 
-## Hardware / OS
+## 🥧 Hardware / OS
 
 - Raspberry Pi model:
 - OS/version:
 - MMDVM HAT type:
 - MMDVM firmware/version:
+- browser/device (for WebUI bugs):
 
-## What happened?
+## 🐛 What happened?
 
-Describe the failure and what you expected instead.
+Describe the failure.
 
-## Steps to reproduce
+## ✅ What did you expect?
+
+Describe the expected behavior.
+
+## 🔁 Steps to reproduce
 
 1.
 2.
 3.
 
-## RF state
+## 📡 RF state
 
-Was the RF path running/enabled when the problem occurred?
+- RF running when it happened? yes/no
+- RF enabled at boot? yes/no/unknown
+- relevant TG/frequency action, if any:
 
-## Logs / diagnostics
+## 🩺 Logs / diagnostics
 
-Prefer sanitized output from:
+Prefer the sanitized exporter:
 
 ```bash
 sudo ywd-hotspotctl diagnostics
 ```
 
-**Do not attach `/etc/ywd-hotspot`, a protected backup, BrandMeister passwords/API keys, or other reusable credentials.**
+Review the bundle before attaching it.
 
-## Recent changes
+## 🔧 Recent changes
 
-What configuration/update/hardware change happened immediately before the problem, if any?
+What update, configuration, hardware, browser, or network change happened immediately before the problem?
+
+## 📱 Screenshots
+
+For UI bugs, screenshots are welcome after checking that they do not expose secrets/private data.

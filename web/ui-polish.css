@@ -1,0 +1,79 @@
+/* Alpha10-dev WebUI micro-polish.
+ * Kept in a same-origin stylesheet so the dashboard's strict CSP stays intact.
+ */
+
+/* Toasts: stronger hierarchy without changing the existing toast API. */
+.toast{
+  display:flex;
+  align-items:flex-start;
+  gap:9px;
+  border-color:var(--line2);
+  box-shadow:0 12px 35px #000a,0 0 22px #62e9ff10;
+}
+.toast::before{
+  content:"✓";
+  flex:0 0 auto;
+  color:var(--good);
+  font-weight:900;
+  line-height:1.1;
+  text-shadow:0 0 12px currentColor;
+}
+.toast.bad{
+  border-color:var(--bad);
+  box-shadow:0 12px 35px #000a,0 0 22px #ff6c7d14;
+}
+.toast.bad::before{content:"!";color:var(--bad)}
+.toast.on{animation:ywdToastIn .18s ease-out}
+
+/* Confirmation/login dialogs share the same base modal primitives. */
+.modal.on{animation:ywdModalShadeIn .14s ease-out}
+.modal.on .dialog{animation:ywdModalIn .16s ease-out}
+.modal.closing{display:flex;animation:ywdModalShadeOut .12s ease-in forwards}
+.modal.closing .dialog{animation:ywdModalOut .12s ease-in forwards}
+.modal .dialog{max-height:calc(100dvh - 40px);overflow:auto}
+
+/* Async action feedback. The original label is restored when the Promise settles. */
+.btn.ywd-working{
+  cursor:wait!important;
+  opacity:.78!important;
+  color:var(--cyan)!important;
+}
+.btn.ywd-working::before{
+  content:"";
+  display:inline-block;
+  width:.72em;
+  height:.72em;
+  margin-right:.55em;
+  vertical-align:-.04em;
+  border:2px solid currentColor;
+  border-right-color:transparent;
+  border-radius:50%;
+  animation:ywdSpin .7s linear infinite;
+}
+
+/* Talkgroup Manager classes previously injected from JS are repeated here so
+ * they are fully effective under style-src 'self'. */
+.tg-spacer{margin-top:12px}
+.tg-id{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-weight:700}
+.tg-plan-add{border-color:rgba(68,255,170,.45)}
+.tg-plan-remove{border-color:rgba(255,90,110,.5);opacity:.78}
+.tg-row-actions{display:flex;gap:6px;flex-wrap:wrap}
+.tg-star{font-size:1.05rem;min-width:36px}
+#tgFavoriteRows .row,#tgSetRows .row{align-items:center;gap:8px}
+#tgManagerState{margin-bottom:10px}
+
+@keyframes ywdSpin{to{transform:rotate(360deg)}}
+@keyframes ywdToastIn{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
+@keyframes ywdModalShadeIn{from{opacity:0}to{opacity:1}}
+@keyframes ywdModalShadeOut{from{opacity:1}to{opacity:0}}
+@keyframes ywdModalIn{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}
+@keyframes ywdModalOut{from{opacity:1;transform:none}to{opacity:0;transform:translateY(5px) scale(.99)}}
+
+@media(max-width:440px){
+  .modal{padding:12px}
+  .modal .dialog{max-height:calc(100dvh - 24px)}
+}
+
+@media(prefers-reduced-motion:reduce){
+  .toast.on,.modal.on,.modal.on .dialog,.modal.closing,.modal.closing .dialog,.btn.ywd-working::before{animation:none}
+}

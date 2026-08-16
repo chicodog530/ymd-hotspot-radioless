@@ -1,167 +1,92 @@
-# Upgrading YWD-Hotspot
+# 🔄 Upgrading YWD-Hotspot
 
-The update invariant is simple: **an update must not unexpectedly enable RF**.
+[← Docs index](README.md) · [Installation](INSTALL.md) · [Project README](../README.md) · [Security](../SECURITY.md)
 
-`0.1.0-alpha6` introduced the GitHub-managed source checkout and staged/validated update path. `0.1.0-alpha7-dev` adds a persistent `main` / `dev` update channel on top of that mechanism. Normal application updates still do **not** rebuild the pinned MMDVM-Host or DMRGateway binaries.
+---
 
-## Managed layout
+> [!IMPORTANT]
+> **Update invariant:** an update must never unexpectedly enable RF.
+
+Normal YWD application updates do **not** rebuild the pinned MMDVM-Host or DMRGateway binaries.
+
+## 🧱 Managed layout
 
 ```text
-/opt/ywd-hotspot/repo    root-owned Git source checkout
-/opt/ywd-hotspot/app     deployed runtime copy
+/opt/ywd-hotspot/repo    root-owned managed Git checkout
+/opt/ywd-hotspot/app     deployed runtime copy; no .git directory
 /etc/ywd-hotspot         canonical config + build provenance
 /var/backups/ywd-hotspot protected pre-update backups
 ```
 
-The live runtime is deliberately separate from `.git`. A failed fetch or dirty checkout therefore does not affect RF operation.
+The live runtime is deliberately separate from Git/network activity.
 
-## Update channels
+## 🌿 Update channels
 
-Alpha7-dev supports two named channels:
+YWD-Hotspot has two named channels:
 
-```text
-main    promoted/tested project line
-dev     active development/test line
-```
+| Channel | Purpose |
+|---|---|
+| `main` | promoted/conservative project line |
+| `dev` | active development and Pi test line |
 
-Show the configured channel:
+Show the current channel:
 
 ```bash
 ywd-hotspotctl update-channel
 ```
 
-Switch channels without applying anything yet:
+Switch channel without applying anything yet:
 
 ```bash
-sudo ywd-hotspotctl update-channel dev
 sudo ywd-hotspotctl update-channel main
+sudo ywd-hotspotctl update-channel dev
 ```
 
-After a channel is set, normal commands follow it automatically:
+After that, normal update commands follow the saved channel automatically.
 
-```bash
-sudo ywd-hotspotctl update --check
-sudo ywd-hotspotctl update --dry-run
-sudo ywd-hotspotctl update
-```
-
-A successful explicit branch update also remembers `main` or `dev` as the new channel:
+A successful explicit branch update also remembers `main` or `dev`:
 
 ```bash
 sudo ywd-hotspotctl update --branch dev
 ```
 
-That means an existing Alpha6 appliance can cross onto the development line once with `--branch dev`; after the update succeeds, future no-argument update commands follow `dev`.
-
 Updating to a specific tag does **not** change the saved channel.
 
-The channel is stored separately at:
+Channel file:
 
 ```text
 /etc/ywd-hotspot/update-channel
 ```
 
-and is also reflected in build provenance/About data.
-
-## Moving an older archive install to GitHub
-
-Clone the canonical repository:
-
-```bash
-cd ~
-git clone https://github.com/merberg-ai/ywd-hotspot.git
-cd ywd-hotspot
-chmod +x INSTALL.sh UPDATE.sh UNINSTALL.sh GITHUB-UPDATE.sh MIGRATE-TO-GITHUB.sh
-chmod +x bin/ywd-hotspotctl lab/mmdvm-diag.sh lib/*.py
-```
-
-Then either run:
-
-```bash
-sudo ./INSTALL.sh
-```
-
-and choose **Adopt existing installation and switch to GitHub updates**, or directly run:
-
-```bash
-sudo ./MIGRATE-TO-GITHUB.sh
-```
-
-Migration preserves configuration, credentials, calibration/history data and current RF active/enabled state. It does not rebuild MMDVM-Host or DMRGateway.
-
-## Alpha6 executable-bit migration hotfix
-
-The first Alpha6 migration script applied `chmod` to files inside `/opt/ywd-hotspot/repo`. Because those files were initially committed without executable mode, Git reported mode-only changes as local modifications and the safety guard correctly stopped the update.
-
-Current code fixes that behavior. The managed checkout no longer mutates tracked permissions, ignores executable-bit-only drift, and still refuses actual content changes.
-
-If migration stopped with a list similar to:
-
-```text
- M GITHUB-UPDATE.sh
- M INSTALL.sh
- M MIGRATE-TO-GITHUB.sh
- M UPDATE.sh
- M bin/ywd-hotspotctl
- M lib/dashboard.py
-```
-
-recover with:
-
-```bash
-sudo git -C /opt/ywd-hotspot/repo config core.fileMode false
-sudo git -C /opt/ywd-hotspot/repo status --short
-```
-
-For this specific bug, the second command should print nothing. If it still prints modified files, stop and inspect them before proceeding; the updater will not destroy genuine local content changes.
-
-When the status is clean, rerun the migration from the clone you originally used:
-
-```bash
-cd ~/tmp/ywd-hotspot
-sudo ./MIGRATE-TO-GITHUB.sh
-```
-
-The old launcher can safely complete the migration after `core.fileMode=false` because it will fetch the corrected candidate. No MMDVM-Host or DMRGateway rebuild is required.
-
-## Check for updates
+## 🔎 Check for an update
 
 ```bash
 sudo ywd-hotspotctl update --check
 ```
 
-This fetches Git metadata and compares the installed build information to the selected channel/ref. It does not restart or stop services.
+This fetches Git metadata and compares the installed build to the selected channel/ref. It does not stop/restart services.
 
-Example output is similar to:
-
-```text
-Installed : 0.1.0-alpha7-dev
-Commit    : 1234567890
-Target    : 0.1.0-alpha7-dev
-Source    : dev @ abcdef1234
-Channel   : dev
-Status    : update available
-```
-
-## Validate without applying
+## 🧪 Validate without applying
 
 ```bash
 sudo ywd-hotspotctl update --dry-run
 ```
 
-The updater:
+A dry run:
 
-- fetches the canonical repository
-- resolves the selected channel/branch/tag
-- stages the candidate outside the live app
-- checks required files
-- runs `bash -n` on shell entry points
-- runs Python bytecode compilation checks
-- exits without touching `/opt/ywd-hotspot/app` or service state
+1. fetches the canonical repository
+2. resolves the selected branch/tag
+3. stages the candidate outside the live app
+4. checks required runtime files
+5. runs `bash -n` on shell entry points
+6. runs Python compile checks
+7. exits without replacing `/opt/ywd-hotspot/app`
 
-## Apply an update
+RF/service state is unchanged.
 
-Follow the saved update channel:
+## ⬆️ Apply an update
+
+Follow the saved channel:
 
 ```bash
 sudo ywd-hotspotctl update
@@ -174,57 +99,51 @@ sudo ywd-hotspotctl update --branch main
 sudo ywd-hotspotctl update --branch dev
 ```
 
-Specific release tag:
+Specific tag:
 
 ```bash
 sudo ywd-hotspotctl update --tag v0.1.0-alpha6
 ```
 
-The command asks for explicit confirmation before applying a candidate.
+The updater asks for explicit confirmation before it applies a candidate.
 
-## What happens during a GitHub update
+## 🛡️ What the updater protects
 
-`GITHUB-UPDATE.sh` performs the network/source phase first while the current hotspot continues running:
+`GITHUB-UPDATE.sh` handles source/network work first while the current hotspot keeps running:
 
 1. acquires an update lock
 2. verifies `/opt/ywd-hotspot/repo`
-3. verifies the origin is the canonical YWD-Hotspot repository
-4. refuses a dirty checkout containing content changes
-5. resolves the saved channel or explicit branch/tag
-6. fetches branches/tags
-7. resolves the target commit/version
-8. stages the commit separately
-9. validates the staged source
-10. invokes the normal transactional `UPDATE.sh`
-11. advances `/opt/ywd-hotspot/repo` only after the live update succeeds
-12. persists a successful `main`/`dev` branch selection as the channel
-
-Executable-bit-only drift is ignored in the managed checkout; file-content changes are still treated as dirty and block updates.
+3. verifies the canonical repository origin
+4. refuses real local content modifications
+5. fetches branches/tags
+6. resolves the selected target commit/version
+7. stages the candidate separately
+8. validates the candidate
+9. calls transactional `UPDATE.sh`
+10. advances the managed checkout only after the live update succeeds
 
 `UPDATE.sh` then:
 
 - records active/enabled service state
-- saves protected copies of `/etc/ywd-hotspot` and `/opt/ywd-hotspot/app`
-- replaces the deployed YWD application files
-- reinstalls CLI/admin/sudoers/systemd units
-- migrates/normalizes canonical configuration
-- regenerates radio INI files
-- writes `/etc/ywd-hotspot/build-info.json`
+- creates protected config/app backups
+- deploys the new YWD application layer
+- reinstalls CLI/admin/sudoers/systemd pieces
+- migrates/normalizes canonical config
+- regenerates radio INIs
+- writes build provenance
 - preserves RF autostart policy
-- restarts only services that were running as appropriate
+- restarts only services that need to come back
 - restores the exact RF enabled/disabled boot policy
 
-If applying the runtime fails, `UPDATE.sh` attempts to restore the previous application/configuration and service state from the protected pre-update backup.
-
-## RF behavior
-
-The updater never interprets "new code exists" as permission to start RF.
+## 📡 RF behavior
 
 Examples:
 
-- RF stopped + disabled before update -> remains stopped + disabled
-- RF running + enabled before update -> update restarts it as required and restores enabled state
-- dashboard stopped by operator -> updater does not use that as permission to start RF
+| Before update | After update |
+|---|---|
+| RF stopped + disabled | remains stopped + disabled |
+| RF running + enabled | restarted as needed, then enabled state restored |
+| dashboard stopped | update does not treat that as permission to start RF |
 
 Always verify afterward:
 
@@ -232,35 +151,100 @@ Always verify afterward:
 ywd-hotspotctl status
 ```
 
-## Build/source information
+## 🔁 Moving an older archive install to GitHub
+
+Clone the canonical repository:
 
 ```bash
-ywd-hotspotctl source
+sudo apt update
+sudo apt install -y git
+
+cd ~
+git clone https://github.com/merberg-ai/ywd-hotspot.git
+cd ywd-hotspot
+sudo ./MIGRATE-TO-GITHUB.sh
 ```
 
-The same information, including the update channel, appears in the WebUI header and About page.
+Migration adopts the promoted `main` line first and does **not** rebuild the RF binaries.
 
-Build provenance is stored in the non-secret file:
+If you want the active test line afterward:
+
+```bash
+sudo ywd-hotspotctl update --branch dev
+```
+
+See **[INSTALL.md](INSTALL.md)** for the full migration/install flow.
+
+## 🧯 Recovery and rollback
+
+### Protected update backups
+
+Before the live runtime is replaced, YWD-Hotspot creates a directory similar to:
 
 ```text
-/etc/ywd-hotspot/build-info.json
+/var/backups/ywd-hotspot/pre-0.1.0-alpha10-dev-YYYYMMDD-HHMMSS/
 ```
 
-## Local changes in the managed checkout
+It contains protected archives of the previous config and deployed application.
 
-Updates intentionally refuse actual content changes reported by:
+> [!CAUTION]
+> Configuration backups can contain reusable credentials. Keep them private.
+
+If runtime application fails during `UPDATE.sh`, the updater attempts to restore the previous application/configuration and service policy automatically.
+
+### Dirty managed checkout
+
+The updater intentionally refuses real content changes in:
 
 ```bash
 git -C /opt/ywd-hotspot/repo status --short
 ```
 
-If it shows modifications after mode-only drift has been ignored, investigate them. The updater will not silently destroy local edits.
+Do not `git reset --hard` blindly. Investigate unexpected modifications first.
 
-Application configuration should never be kept as source modifications in `/opt/ywd-hotspot/repo`; runtime configuration belongs under `/etc/ywd-hotspot`.
+The managed checkout is source state, not a place for appliance configuration. Runtime config belongs under `/etc/ywd-hotspot`.
 
-## Manual UPDATE.sh remains available
+### Alpha6 executable-bit migration hotfix
 
-A clean source checkout can still be applied manually:
+Early Alpha6 migration code changed tracked executable modes in `/opt/ywd-hotspot/repo`, causing Git's dirty-tree safety check to stop the migration.
+
+Current code ignores mode-only drift while still refusing content changes.
+
+For a system that stopped on that specific old bug:
+
+```bash
+sudo git -C /opt/ywd-hotspot/repo config core.fileMode false
+sudo git -C /opt/ywd-hotspot/repo status --short
+```
+
+The second command should print nothing if the problem is only executable-bit drift. If it still lists modifications, inspect them before proceeding.
+
+Then rerun the migration from the clone you used:
+
+```bash
+cd ~/tmp/ywd-hotspot
+sudo ./MIGRATE-TO-GITHUB.sh
+```
+
+No RF-stack rebuild is required.
+
+## 🧭 Build/source information
+
+```bash
+ywd-hotspotctl source
+```
+
+The same provenance appears in the WebUI header/About page.
+
+Non-secret provenance file:
+
+```text
+/etc/ywd-hotspot/build-info.json
+```
+
+## 🛠️ Manual source apply
+
+A clean development checkout can still be applied manually:
 
 ```bash
 cd ~/ywd-hotspot
@@ -268,20 +252,12 @@ git pull --ff-only
 sudo ./UPDATE.sh
 ```
 
-That path is useful for development/recovery, but normal deployments should use `ywd-hotspotctl update` so fetching, validation and provenance handling are consistent.
+That is useful for recovery/development, but normal appliances should use `ywd-hotspotctl update` so target resolution, validation, channel behavior, and provenance remain consistent.
 
-## Protected backups
+## 📌 Upstream RF pins
 
-Before replacing the live application, the updater creates a directory like:
+Do not move `pins.env` during unrelated UI/docs work merely because newer upstream commits exist. An upstream RF-stack pin change alters the calibration/stability baseline and deserves its own regression-test build.
 
-```text
-/var/backups/ywd-hotspot/pre-0.1.0-alpha7-dev-YYYYMMDD-HHMMSS/
-```
+---
 
-It contains protected archives of configuration and the previous deployed application. Configuration archives can contain reusable credentials; keep them private.
-
-Normal configuration-history rollback remains separate from full application-update rollback.
-
-## Updating pinned upstream radio components
-
-Do not change `pins.env` during calibration/stability work merely because newer upstream commits exist. Moving an RF-stack pin changes the calibration/test baseline and should be its own deliberate build/regression-test event.
+**Next:** [🚀 Installation](INSTALL.md) · [📚 Docs index](README.md)

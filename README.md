@@ -2,92 +2,66 @@
   <img src="assets/branding/ywd-hotspot-badge-256.webp" alt="YWD-Hotspot logo" width="220">
 </p>
 
-# YWD-Hotspot
+<h1 align="center">YWD-Hotspot</h1>
+<p align="center"><strong>Lightweight DMR hotspot software for Raspberry Pi + MMDVM HAT hardware.</strong></p>
+<p align="center">📡 DMR · 🎛️ BrandMeister · 🥧 Pi Zero W · 🧪 Calibration · 🔄 Safe GitHub updates</p>
 
-**A lightweight DMR hotspot stack for Raspberry Pi + MMDVM HAT hardware.**
+<p align="center">
+  <a href="#-quick-install">🚀 Install</a> ·
+  <a href="#-updating">🔄 Update</a> ·
+  <a href="#-talkgroup-manager">📻 Talkgroups</a> ·
+  <a href="#-calibration">🧪 Calibration</a> ·
+  <a href="docs/README.md">📚 Docs</a> ·
+  <a href="SECURITY.md">🔐 Security</a>
+</p>
 
-YWD-Hotspot is a small, purpose-built alternative to a full hotspot distribution. It keeps the RF path on pinned upstream **MMDVM-Host** and **DMRGateway**, then adds a lightweight local dashboard, activity collector, OLED support, BrandMeister controls, a Talkgroup Manager, transactional configuration, diagnostics, calibration tools, build provenance, and safe GitHub-managed updates without dragging a heavyweight web stack onto the Pi.
+---
 
-> **Development status:** `0.1.0-alpha9-dev` is the active `dev` polish build. `0.1.0-alpha8-dev` was user-tested successfully and is retained at the `dev-alpha8-known-good` checkpoint branch. `main` remains on the Alpha6 line until dev work is explicitly promoted. Alpha software can break; keep backups and do not expose the dashboard directly to the public Internet.
+> [!IMPORTANT]
+> **Development status:** `0.1.0-alpha10-dev` is the active `dev` build. `0.1.0-alpha9.2-dev` was user-tested successfully and is preserved at `dev-alpha9.2-known-good`. `main` remains the promoted line and is intentionally more conservative than `dev`.
 
-Canonical repository: **https://github.com/merberg-ai/ywd-hotspot**
+> [!WARNING]
+> The built-in WebUI is plain HTTP for a trusted LAN. Do **not** forward the dashboard port directly to the public Internet.
 
-## Primary target
+## ✨ What is YWD-Hotspot?
 
-The current development and test target is:
+YWD-Hotspot is a purpose-built DMR hotspot stack for small Raspberry Pi systems—especially the original **Raspberry Pi Zero W**. The RF path stays on pinned upstream **MMDVM-Host** and **DMRGateway**, while YWD-Hotspot adds a lightweight local UI, CLI, BrandMeister controls, diagnostics, calibration tools, OLED support, and safe GitHub-managed updates.
 
-- Raspberry Pi Zero W Rev 1.1 (original Zero W, not Zero 2 W)
+The design goal is simple: **make a DMR hotspot feel like a polished appliance without turning a Pi Zero into a tiny web-server science project.**
+
+| Area | What YWD-Hotspot adds |
+|---|---|
+| 📡 RF | DMR-only simplex configuration, live RX/TX state, Last Heard, BER/RSSI context |
+| 🎛️ BrandMeister | Static/dynamic TG controls, Drop QSO, Talkgroup Manager, directory search |
+| 🌐 WebUI | Responsive dark UI, authenticated write controls, themed modals/toasts |
+| 🧪 Calibration | Baseline save/restore, repeated BER samples, RXOffset recommendation, export |
+| 🩺 Health | Service state, Wi-Fi/power/temperature checks, persistent journal, diagnostics |
+| 📟 OLED | Optional lightweight I2C status/activity display |
+| 💻 CLI | Colorized control console, status/source/calibration helpers |
+| 🔄 Updates | Managed Git checkout, staging, validation, backups, rollback attempt, channels |
+
+No Node.js runtime. No React/Vue. No SQL server. No Redis. No Docker.
+
+## 🥧 Primary hardware target
+
+Current development and test baseline:
+
+- Raspberry Pi Zero W Rev 1.1 — original Zero W, not Zero 2 W
 - Raspberry Pi OS Lite 32-bit / Raspbian 13 (trixie)
 - Simplex MMDVM_HS_Hat / JumboSpot-style board
 - STM32 + ADF7021 modem hardware
 - `/dev/serial0` at 115200 baud
-- SSD1306-like 128x64 I2C OLED at `0x3C` when fitted
-- DMR simplex operation through BrandMeister
+- expected Pi Zero mapping: `/dev/serial0 -> /dev/ttyAMA0`
+- SSD1306-like 128×64 I2C OLED at `0x3C` when fitted
+- DMR simplex through BrandMeister
 
-Other Raspberry Pi models may work, but the original Pi Zero W is the performance and compatibility baseline.
+Other Pi models may work, but the original Pi Zero W is the performance budget.
 
-## What it includes
+## 🚀 Quick install
 
-- pinned MMDVM-Host and DMRGateway builds
-- DMR-only simplex configuration
-- BrandMeister connectivity and server-side API controls
-- dedicated BrandMeister Talkgroup Manager with directory search, static-TG planning, favorites and saved sets
-- live **RX FROM RADIO** / **TX TO RADIO** activity
-- Last Heard with caller/TG, BER, RSSI and packet-loss information when available
-- RadioID callsign lookup with lightweight periodic updates
-- transactional web configuration with validation, history and rollback
-- RF-safe start/stop/restart behavior
-- local web-control password for write/admin actions
-- approximate city/state or ZIP/postal location lookup
-- guided RX calibration with repeated-sample BER aggregation and export
-- health, persistent journaling and sanitized diagnostic exports
-- optional I2C OLED status display
-- About page with project/author/repository information
-- branch/commit/build provenance and persistent `main` / `dev` update channels
-- themed terminal control console plus installer/updater ASCII branding
-- lightweight custom WebUI confirmation modals and toast notifications matching the dashboard theme
-- GitHub-managed update checking, staging, validation and safe apply
-- migration path from older archive-installed builds without recompiling the radio stack
-- plain HTML/CSS/JS dashboard with no Node.js, database server, Docker, or frontend framework
+### Promoted `main` line
 
-Terminal colors are enabled only when output is attached to a terminal. Set `NO_COLOR=1` to force plain output; redirected JSON/CSV exports remain machine-safe and uncolored.
-
-## Architecture
-
-```text
-DMR HT
-  |
-  v
-MMDVM HAT
-  |
-  v
-MMDVM-Host
-  |
-  v
-DMRGateway
-  |
-  v
-BrandMeister
-
-Side services:
-  activity collector
-  dashboard
-  OLED
-  CLI/admin helper
-```
-
-The dashboard, OLED and activity presentation are intentionally outside the RF-critical path. If the dashboard dies, DMR should keep working.
-
-The deployed application and Git checkout are kept separate:
-
-```text
-/opt/ywd-hotspot/app     deployed runtime; no .git directory
-/opt/ywd-hotspot/repo    root-owned managed Git checkout
-```
-
-This lets YWD-Hotspot fetch and validate an update before touching the live application.
-
-## Fresh install from GitHub
+A normal Git clone preserves the repository's executable bits, so a fresh install is intentionally short:
 
 ```bash
 sudo apt update
@@ -96,74 +70,81 @@ sudo apt install -y git
 cd ~
 git clone https://github.com/merberg-ai/ywd-hotspot.git
 cd ywd-hotspot
-
-chmod +x INSTALL.sh UPDATE.sh UNINSTALL.sh GITHUB-UPDATE.sh MIGRATE-TO-GITHUB.sh
-chmod +x bin/ywd-hotspotctl lab/mmdvm-diag.sh lib/*.py
-
 sudo ./INSTALL.sh
 ```
 
-On an original Pi Zero W, YWD-Hotspot expects:
+### Active `dev` line
 
-```text
-/dev/serial0 -> /dev/ttyAMA0
-```
-
-If the installer reports a UART problem:
+For the current development build:
 
 ```bash
-sudo ./lab/mmdvm-diag.sh
+sudo apt update
+sudo apt install -y git
+
+cd ~
+git clone --branch dev https://github.com/merberg-ai/ywd-hotspot.git
+cd ywd-hotspot
+sudo ./INSTALL.sh
 ```
 
-Choose **option 5** to apply the recommended Pi Zero W PL011 configuration, reboot, return to the repository, and run `sudo ./INSTALL.sh` again.
+> [!NOTE]
+> If you are working from a ZIP/Windows copy that lost executable bits, run the entry point through Bash instead: `sudo bash ./INSTALL.sh`.
 
-A genuinely fresh installation builds the pinned MMDVM-Host and DMRGateway commits using `make -j1`. That can take a while on an original Pi Zero W.
+A genuinely fresh installation builds the pinned MMDVM-Host and DMRGateway commits with `make -j1`. On an original Pi Zero W, that can take a while. Normal YWD application updates do **not** repeat that compile.
 
-The installer **does not start RF unless you explicitly type `ENABLE-RF`**.
-
-See [docs/INSTALL.md](docs/INSTALL.md) for the complete walkthrough.
-
-## Existing installation: switch to GitHub management
-
-If `INSTALL.sh` detects an existing YWD-Hotspot installation, it offers:
+The installer never starts RF unless you explicitly type:
 
 ```text
-1) Adopt existing installation and switch to GitHub updates
-2) Full/recovery installation
-3) Cancel
+ENABLE-RF
 ```
 
-The normal migration path is option **1**. It preserves configuration, credentials, calibration/history data, and current RF service state. It **does not rebuild MMDVM-Host or DMRGateway**.
+Full walkthrough: **[docs/INSTALL.md](docs/INSTALL.md)**
 
-You can also run the migration directly from a fresh clone:
+## 🔁 Existing install → GitHub management
+
+If an older archive-installed YWD-Hotspot is already working, do **not** rebuild the radio stack just to switch update methods.
 
 ```bash
 cd ~
 git clone https://github.com/merberg-ai/ywd-hotspot.git
 cd ywd-hotspot
-chmod +x INSTALL.sh UPDATE.sh UNINSTALL.sh GITHUB-UPDATE.sh MIGRATE-TO-GITHUB.sh
-chmod +x bin/ywd-hotspotctl lab/mmdvm-diag.sh lib/*.py
 sudo ./MIGRATE-TO-GITHUB.sh
 ```
 
-This is the intended path for older `.tar.gz`/`.zip` installations.
+Migration preserves:
 
-## After installation
+- canonical config
+- BrandMeister credentials
+- local WebUI control password
+- calibration/history/runtime data
+- current RF running/enabled policy
 
-Check the appliance and source provenance:
+It does **not** rebuild MMDVM-Host or DMRGateway.
+
+After migration, cross onto `dev` only if you want the active test line:
+
+```bash
+sudo ywd-hotspotctl update --branch dev
+```
+
+A successful `--branch dev` update remembers `dev` as the future update channel.
+
+## ✅ After installation
+
+Check the appliance:
 
 ```bash
 ywd-hotspotctl status
 ywd-hotspotctl source
 ```
 
-Configure the local dashboard write-control password:
+Configure the local write-control password:
 
 ```bash
 sudo ywd-hotspotctl web-password
 ```
 
-Configure the separate BrandMeister API v2 key if you want static-TG and Drop QSO controls:
+Configure a separate BrandMeister API v2 key for TG/Drop-QSO controls:
 
 ```bash
 sudo ywd-hotspotctl bm-api-key
@@ -175,79 +156,108 @@ Then open:
 http://PI-IP:8080/
 ```
 
-The dashboard port is configurable and may differ from `8080`.
+The dashboard port is configurable.
 
-## Talkgroup Manager
+## 🔄 Updating
 
-The **TALKGROUPS** page provides a safer workflow than firing individual API changes immediately:
+YWD-Hotspot separates managed source from the live runtime:
 
-1. search the public BrandMeister talkgroup directory by TG ID or name
-2. add/remove TGs from a desired static plan
-3. review the calculated `ADD` / `REMOVE` diff
-4. press **APPLY PLAN**
-5. confirm the exact BrandMeister changes
+```text
+/opt/ywd-hotspot/repo    root-owned managed Git checkout
+/opt/ywd-hotspot/app     deployed runtime copy; no .git directory
+```
 
-The directory is fetched only on demand and cached locally for 24 hours so repeated searches are cheap on the original Pi Zero W. Favorites and named static sets are browser-local convenience data and never change BrandMeister by themselves.
-
-See [docs/TALKGROUPS.md](docs/TALKGROUPS.md).
-
-## GitHub-managed updates
-
-Normal updates no longer require manually entering the checkout and running `git pull`.
-
-Check for an update without changing services:
+Normal update flow:
 
 ```bash
 sudo ywd-hotspotctl update --check
-```
-
-Fetch and validate the candidate without changing the live application:
-
-```bash
 sudo ywd-hotspotctl update --dry-run
-```
-
-Apply the selected persistent update channel after explicit confirmation:
-
-```bash
 sudo ywd-hotspotctl update
 ```
 
-Select a persistent channel:
+Update channels:
 
 ```bash
 sudo ywd-hotspotctl update-channel main
 sudo ywd-hotspotctl update-channel dev
 ```
 
-Specific refs are also supported:
+The updater fetches and validates while the current hotspot keeps running, then applies only after explicit confirmation. It preserves the RF active/enabled policy and keeps a protected pre-update backup.
 
-```bash
-sudo ywd-hotspotctl update --branch main
-sudo ywd-hotspotctl update --branch dev
-sudo ywd-hotspotctl update --tag v0.1.0-alpha6
+Full details and recovery notes: **[docs/UPGRADING.md](docs/UPGRADING.md)**
+
+## 📻 Talkgroup Manager
+
+The **TALKGROUPS** page gives BrandMeister static TG management a safer workflow:
+
+1. search the public BrandMeister TG directory by ID or name
+2. build a desired static-TG plan locally
+3. preview exact `ADD` / `REMOVE` changes
+4. press **APPLY PLAN**
+5. confirm the plan in the themed YWD dialog
+
+Browsing, favorites, saved sets, and plan editing do **not** change BrandMeister by themselves.
+
+The directory is normalized and cached locally for 24 hours to stay cheap on a Pi Zero W.
+
+Guide: **[docs/TALKGROUPS.md](docs/TALKGROUPS.md)**
+
+## 🧪 Calibration
+
+The RX workflow is intentionally measurement-driven:
+
+- save a baseline
+- change one variable at a time
+- record repeated RF calls at each RXOffset
+- compare average BER, not one lucky packet
+- require at least 3 samples at an offset before recommending it
+- require operator confirmation before applying the recommendation
+
+TX calibration remains separate because the hotspot cannot directly measure the handheld receiver's BER.
+
+Guide: **[docs/CALIBRATION.md](docs/CALIBRATION.md)**
+
+## 🧱 Architecture
+
+```text
+DMR HT
+  │
+  ▼
+MMDVM HAT
+  │
+  ▼
+MMDVM-Host
+  │
+  ▼
+DMRGateway
+  │
+  ▼
+BrandMeister
+
+Side services:
+  ├─ activity collector
+  ├─ dashboard / API
+  ├─ OLED
+  └─ RadioID updater
 ```
 
-A successful explicit `--branch main` or `--branch dev` update remembers that branch as the future no-argument update channel.
+The dashboard/OLED/activity presentation stay outside the RF-critical path. If the WebUI dies, DMR should keep working.
 
-The GitHub updater:
+Architecture notes: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**
 
-1. leaves the running hotspot alone while fetching
-2. refuses a dirty/unexpected managed checkout
-3. resolves the requested branch/tag
-4. stages the candidate separately
-5. validates required files, shell syntax and Python syntax
-6. calls the transactional `UPDATE.sh`
-7. preserves RF active/enabled state
-8. updates the managed checkout only after the live update succeeds
+## 🔐 Security model
 
-`UPDATE.sh` also keeps protected pre-update copies of the configuration and deployed application. If applying the new runtime fails, it attempts to restore the previous app/config and service state.
+YWD-Hotspot keeps three credentials deliberately separate:
 
-It does **not** rebuild MMDVM-Host or DMRGateway.
+1. BrandMeister Hotspot Security password
+2. BrandMeister API v2 key
+3. local YWD-Hotspot WebUI control password
 
-See [docs/UPGRADING.md](docs/UPGRADING.md).
+The API key stays server-side and is never returned to browser JavaScript. Sanitized diagnostics are preferred for support; protected backups can contain reusable credentials and must remain private.
 
-## Build provenance / About page
+Read **[SECURITY.md](SECURITY.md)** before exposing or sharing anything from a real appliance.
+
+## 🧭 Build provenance
 
 Install/update writes non-secret provenance to:
 
@@ -255,47 +265,51 @@ Install/update writes non-secret provenance to:
 /etc/ywd-hotspot/build-info.json
 ```
 
-The dashboard header and About page display information such as:
+The CLI and About page show:
 
 ```text
-Version         0.1.0-alpha9-dev
+Version         0.1.0-alpha10-dev
 Git branch      dev
 Update channel  dev
 Git commit      <commit SHA>
-Commit date     <Git commit date>
+Commit date     <commit date>
 Source          github
 Source state    clean
 ```
 
-The About page also displays the optimized YWD-Hotspot logo, links to the canonical GitHub repository and `https://kj6ywd.net`, and credits **KJ6YWD**.
+## 💻 CLI quick reference
 
-## CLI
+<details>
+<summary><strong>Show common commands</strong></summary>
 
 ```bash
+# Read-only/status
 ywd-hotspotctl status
 ywd-hotspotctl source
 ywd-hotspotctl health
 ywd-hotspotctl lastheard
 ywd-hotspotctl logs
 ywd-hotspotctl calibration
-ywd-hotspotctl update-channel
 
+# Update management
 sudo ywd-hotspotctl update --check
 sudo ywd-hotspotctl update --dry-run
 sudo ywd-hotspotctl update
 sudo ywd-hotspotctl update-channel dev
-sudo ywd-hotspotctl migrate-github
 
+# Config/support
 sudo ywd-hotspotctl configure
 sudo ywd-hotspotctl apply
 sudo ywd-hotspotctl diagnostics
 sudo ywd-hotspotctl backup
+sudo ywd-hotspotctl lab
+
+# RF/runtime
 sudo ywd-hotspotctl restart
 sudo ywd-hotspotctl start
 sudo ywd-hotspotctl stop
-sudo ywd-hotspotctl update-ids
-sudo ywd-hotspotctl lab
 
+# BrandMeister
 sudo ywd-hotspotctl bm profile
 sudo ywd-hotspotctl bm addtg 3100
 sudo ywd-hotspotctl bm deltg 3100
@@ -303,72 +317,13 @@ sudo ywd-hotspotctl bm dropqso
 sudo ywd-hotspotctl bm dropdyn
 ```
 
-Running `sudo ywd-hotspotctl` with no command opens the themed interactive control console.
+Running `sudo ywd-hotspotctl` with no subcommand opens the themed interactive control console.
 
-## WebUI confirmation behavior
+</details>
 
-YWD-Hotspot uses lightweight custom HTML/CSS/JS modals for in-app confirmations such as RF actions, reboot, calibration changes, configuration restore/apply, and Talkgroup Manager apply/remove operations. These are rendered entirely in the browser and add no daemon or server-side polling load to the Pi.
+Terminal colors are automatically disabled when output is redirected. Set `NO_COLOR=1` to force plain output.
 
-The browser's close/reload warning for unsaved Settings remains the native `beforeunload` dialog. Modern browsers intentionally prevent sites from replacing that security-controlled prompt with custom UI.
-
-## Configuration and runtime data
-
-Canonical configuration:
-
-```text
-/etc/ywd-hotspot/config.json
-```
-
-Generated radio configuration:
-
-```text
-/etc/ywd-hotspot/MMDVM-Host.ini
-/etc/ywd-hotspot/DMRGateway.ini
-```
-
-Runtime/history data:
-
-```text
-/var/lib/ywd-hotspot/
-```
-
-Talkgroup directory cache:
-
-```text
-/var/lib/ywd-hotspot/talkgroup-directory.json
-```
-
-Managed source checkout:
-
-```text
-/opt/ywd-hotspot/repo/
-```
-
-Protected update/config backups:
-
-```text
-/var/backups/ywd-hotspot/
-```
-
-Backups can contain credentials. Treat them as secrets.
-
-## Security
-
-The web dashboard is **plain HTTP** and intended for a trusted LAN. Do not forward the dashboard port directly from the Internet.
-
-These credentials remain intentionally separate:
-
-- BrandMeister Hotspot Security password
-- BrandMeister API v2 key
-- local YWD-Hotspot web-control password
-
-The API key stays on the Pi and is not returned to browser JavaScript. Diagnostic/support exports are designed to redact reusable credentials.
-
-GitHub update code accepts only the canonical YWD-Hotspot repository as the managed origin and refuses a dirty checkout rather than silently destroying local changes.
-
-Read [SECURITY.md](SECURITY.md).
-
-## Pinned upstream radio components
+## 📌 Pinned RF components
 
 ```text
 MMDVM-Host
@@ -380,26 +335,28 @@ DMRGateway
   commit 2a3306de313cf4c094c2031c9ced5a6858bbbfcc
 ```
 
-Do not casually move these pins while calibration/stability testing is in progress.
+Do not casually move these pins during calibration/stability work.
 
-## Current development focus
+## 📚 Documentation
 
-The `dev` channel is in a polish pass on top of the user-tested Alpha8 Talkgroup Manager: consistent console branding/color, lighter-weight custom WebUI confirmations, and small mobile UX improvements. This pass deliberately does not change MMDVM-Host, DMRGateway, modem calibration logic, or BrandMeister routing behavior.
+| Guide | Use it for |
+|---|---|
+| **[Documentation index](docs/README.md)** | Find the right guide quickly |
+| **[Installation](docs/INSTALL.md)** | Fresh install, migration, UART/modem preflight |
+| **[Upgrading](docs/UPGRADING.md)** | Channels, staged updates, rollback/recovery |
+| **[Talkgroups](docs/TALKGROUPS.md)** | BrandMeister Talkgroup Manager |
+| **[Calibration](docs/CALIBRATION.md)** | Controlled RX BER workflow |
+| **[Architecture](docs/ARCHITECTURE.md)** | RF path, privilege boundaries, runtime layout |
+| **[Repository / development](docs/GITHUB-SETUP.md)** | Branch model, validation, source workflow |
+| **[Security](SECURITY.md)** | Credentials, exposure, diagnostics |
+| **[Contributing](CONTRIBUTING.md)** | Project constraints and PR expectations |
+| **[Changelog](CHANGELOG.md)** | Development checkpoints |
 
-See [docs/CALIBRATION.md](docs/CALIBRATION.md) and [docs/TALKGROUPS.md](docs/TALKGROUPS.md).
+## 👤 Project
 
-## Documentation
+Written by **KJ6YWD**. Project home: **https://kj6ywd.net**  
+Canonical repository: **https://github.com/merberg-ai/ywd-hotspot**
 
-- [Installation](docs/INSTALL.md)
-- [Upgrading and GitHub migration](docs/UPGRADING.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Calibration](docs/CALIBRATION.md)
-- [Talkgroup Manager](docs/TALKGROUPS.md)
-- [Repository notes](docs/GITHUB-SETUP.md)
-- [Security](SECURITY.md)
-- [Contributing](CONTRIBUTING.md)
-- [Changelog](CHANGELOG.md)
+## 📄 License
 
-## License
-
-YWD-Hotspot is released under the [Unlicense](LICENSE) / public-domain dedication included in this repository.
+YWD-Hotspot is released under the **[Unlicense](LICENSE)** / public-domain dedication included in this repository.

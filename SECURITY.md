@@ -1,34 +1,41 @@
-# Security Policy
+# 🔐 Security Policy
+
+[Project README](README.md) · [Installation](docs/INSTALL.md) · [Upgrading](docs/UPGRADING.md) · [Contributing](CONTRIBUTING.md)
+
+---
 
 YWD-Hotspot controls radio/network services and stores reusable credentials. Treat a deployed hotspot as an appliance, not a disposable static website.
 
-## Supported development state
+## 🧭 Current development state
 
-The project is alpha software. `0.1.0-alpha6` is the current development/test build; `0.1.0-alpha4.1` remains the last explicitly confirmed known-good checkpoint.
+- active development line: `dev` / `0.1.0-alpha10-dev`
+- latest user-tested checkpoint: `dev-alpha9.2-known-good`
+- promoted line: `main`
 
-Security fixes may land only on the active development line rather than being backported to every alpha build.
+Security fixes may land on the active development line before a later promotion.
 
-## Network exposure
+## 🌐 Network exposure
 
 The built-in dashboard uses plain HTTP and is intended for a trusted LAN.
 
-**Do not directly expose the dashboard TCP port to the public Internet.**
+> [!CAUTION]
+> **Do not directly expose the dashboard TCP port to the public Internet.**
 
-If remote administration is required, place it behind an appropriate authenticated/encrypted access layer rather than forwarding the YWD dashboard port itself.
+If remote administration is required, place the hotspot behind an appropriate authenticated/encrypted access layer rather than forwarding the YWD dashboard port itself.
 
-## Secrets
+## 🔑 Secrets
 
 YWD-Hotspot deliberately separates:
 
-- BrandMeister Hotspot Security password
-- BrandMeister API v2 key
-- local web-control password
+1. BrandMeister Hotspot Security password
+2. BrandMeister API v2 key
+3. local WebUI control password
 
-The API key remains server-side. The browser does not receive it back.
+The API key stays server-side. Browser JavaScript does not receive it back.
 
-Do not post real credentials in GitHub issues, screenshots, terminal pastes, logs or support conversations.
+Never post real credentials in GitHub issues, screenshots, terminal pastes, logs, or support conversations.
 
-## Sensitive paths
+## 📁 Sensitive paths
 
 Treat these as sensitive on a real installation:
 
@@ -40,11 +47,11 @@ Treat these as sensitive on a real installation:
 /var/backups/ywd-hotspot/
 ```
 
-`/etc/ywd-hotspot/build-info.json` is intentionally non-secret provenance and contains source/version/commit information only.
+`/etc/ywd-hotspot/build-info.json` is intentionally non-secret provenance containing source/version/commit information only.
 
-Protected backups intentionally contain configuration credentials and are restricted on disk.
+Protected backups can contain reusable configuration credentials and are intentionally restricted on disk.
 
-## GitHub update trust boundary
+## 🔄 GitHub update trust boundary
 
 GitHub-managed deployments use:
 
@@ -55,38 +62,61 @@ GitHub-managed deployments use:
 The updater:
 
 - accepts only the canonical `merberg-ai/ywd-hotspot` origin forms
-- refuses a dirty managed checkout
-- stages a requested commit separately before applying it
-- validates required files and shell/Python syntax before the live runtime is touched
-- advances the managed checkout only after the deployed update succeeds
+- refuses real local content changes in the managed checkout
+- stages a target commit separately before deploy
+- validates required runtime files and shell/Python syntax
+- applies through the transactional updater
+- advances the managed checkout only after deployment succeeds
+- preserves the prior RF active/enabled policy
 
-The update mechanism is not an excuse to weaken RF safety. It must preserve whether RF was active/enabled before an update.
+Do not weaken those checks merely to make local experimentation more convenient.
 
-Do not use the managed root-owned checkout as a general-purpose development tree.
+## 🧱 Web privilege boundary
 
-## Diagnostics
+The WebUI service runs as the restricted `ywd-hotspot` account.
 
-Use the sanitized exporter for support:
-
-```bash
-sudo ywd-hotspotctl diagnostics
-```
-
-It is designed to exclude/redact reusable passwords and API keys. Still review a bundle before publishing it.
-
-## Reporting a security issue
-
-Do not open a public issue containing exploit details plus working credentials/private deployment data. If GitHub private security reporting is enabled, use it. Otherwise open a minimal public issue asking the maintainer for a private contact path without including secrets or sensitive reproduction data.
-
-## Privilege model
-
-The web service runs as the restricted `ywd-hotspot` account. Root-required dashboard operations are constrained through:
+Root-required browser actions are constrained through:
 
 ```text
 /usr/local/libexec/ywd-hotspot-admin
 /etc/sudoers.d/ywd-hotspot
 ```
 
-GitHub update commands are explicit root CLI operations; the Alpha6 WebUI does not expose a browser button that can pull/install arbitrary source.
+The browser must not gain arbitrary shell execution or direct write access to generated MMDVM-Host/DMRGateway INI files.
 
-Changes that broaden sudo permissions, execute user-supplied shell text, expose secrets to browser JavaScript, bypass canonical repository checks, or let the browser directly edit generated INI files require extra scrutiny.
+## 🛡️ Browser policy
+
+The dashboard uses a restrictive Content-Security-Policy. UI polish should use same-origin external CSS/JS rather than weakening CSP with broad `unsafe-inline` allowances.
+
+The custom confirmation/toast layer is browser-side presentation only; it does not create a new privileged backend path.
+
+## 🩺 Diagnostics
+
+Prefer the sanitized support exporter:
+
+```bash
+sudo ywd-hotspotctl diagnostics
+```
+
+It is designed to exclude/redact reusable passwords and API keys. Still review any bundle before publishing it.
+
+Do not upload raw protected config/update backups.
+
+## 🚨 Reporting a security issue
+
+Do not open a public issue containing exploit details plus working credentials/private deployment data.
+
+If GitHub private security reporting is enabled, use it. Otherwise open a minimal public issue asking the maintainer for a private contact path without including secrets or sensitive reproduction data.
+
+## 🔍 Changes requiring extra scrutiny
+
+Treat these as security-sensitive:
+
+- broader sudo permissions
+- user-controlled shell execution
+- secrets exposed to browser JavaScript
+- weakened canonical-repository checks
+- bypassed dirty-tree/update validation
+- browser direct edits to generated INIs
+- public-Internet exposure features
+- changes that can unexpectedly enable RF

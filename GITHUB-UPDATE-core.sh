@@ -133,7 +133,7 @@ required=(
   GITHUB-UPDATE.sh GITHUB-UPDATE-core.sh MIGRATE-TO-GITHUB.sh MIGRATE-TO-GITHUB-core.sh
   bin/ywd-hotspotctl bin/ywd-hotspotctl-core bin/ywd-ui.sh lab/mmdvm-diag.sh
   lib/dashboard.py lib/dashboard_core.py lib/admin.py lib/build_info.py lib/generate-config.py lib/migrate.py
-  web/index.html web/app.js web/app-core.js web/talkgroups.js web/ui-polish.js web/style.css
+  web/index.html web/app.js web/app-core.js web/talkgroups.js web/ui-polish.js web/ui-polish.css web/style.css
   sudoers/ywd-hotspot systemd/ywd-mmdvmhost.service systemd/ywd-dmrgateway.service
   systemd/ywd-dashboard.service systemd/ywd-activity.service
   assets/branding/ywd-hotspot-badge-256.webp

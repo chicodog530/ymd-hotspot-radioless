@@ -1,13 +1,14 @@
-# Branding Assets
+# 🎨 Branding Assets
 
-This directory holds the YWD-Hotspot project artwork.
+[← Project README](../../README.md)
 
-```text
-ywd-hotspot-logo-master.png
-    Original 1254x1254 RGBA source artwork supplied for the project.
+This directory holds the YWD-Hotspot source artwork and lightweight runtime derivative.
 
-ywd-hotspot-badge-256.webp
-    256px optimized WebP derivative for the WebUI/README.
-```
+| Asset | Purpose |
+|---|---|
+| `ywd-hotspot-logo-master.png` | Original 1254×1254 RGBA source artwork |
+| `ywd-hotspot-badge-256.webp` | 256 px optimized WebP used by the README and WebUI |
 
-Alpha6 serves the optimized WebP badge in the WebUI header and at a larger size on the About page. The multi-megabyte master PNG remains a source/repository asset and is not served to dashboard clients.
+The multi-megabyte master PNG stays in the source repository and is **not** copied into the deployed Pi runtime. The WebUI serves only the small WebP badge to keep storage, backups, and page loads lightweight on the original Pi Zero W.
+
+When changing branding, preserve the master artwork as the source asset and regenerate an appropriately sized WebP derivative for runtime use rather than serving the full PNG.

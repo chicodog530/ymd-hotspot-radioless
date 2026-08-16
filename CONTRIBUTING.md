@@ -1,94 +1,136 @@
-# Contributing to YWD-Hotspot
+# 🤝 Contributing to YWD-Hotspot
 
-Thanks for helping with YWD-Hotspot. The priority order is intentionally unglamorous: **RF safety and stability beat feature count**.
+[Project README](README.md) · [Docs](docs/README.md) · [Development notes](docs/GITHUB-SETUP.md) · [Security](SECURITY.md)
 
-## Current phase
+---
 
-`0.1.0-alpha6` is the current development/test build. It adds GitHub provenance/update management and About/branding integration on top of the Alpha5 calibration-prep UI.
+Thanks for helping with YWD-Hotspot. The priority order is intentionally unglamorous:
 
-The next major RF engineering phase remains controlled DMR calibration followed by a stability soak.
+> **RF safety and stability beat feature count.**
 
-Avoid bundling unrelated protocol/network expansion into bug-fix or calibration changes. Deferred examples include TGIF/multi-network routing, YSF, P25, NXDN, D-Star, FM, public-Internet admin, dashboard Wi-Fi management and large frontend framework migrations.
+## 🧭 Current phase
 
-## Design constraints
+- active line: `dev` / `0.1.0-alpha10-dev`
+- latest user-tested checkpoint: `dev-alpha9.2-known-good`
+- promoted line: `main`
 
-The performance target is the original Raspberry Pi Zero W. Prefer:
+Alpha10 is primarily a documentation/GitHub presentation and lightweight WebUI micro-polish pass. It deliberately does not move the MMDVM-Host or DMRGateway pins.
+
+## 🥧 Design constraints
+
+The performance target is the original Raspberry Pi Zero W.
+
+Prefer:
 
 - Python standard library where practical
 - small bounded files/caches
 - plain HTML/CSS/JS
 - event/cached state over expensive repeated polling
 - CSS animation over canvas/WebGL/framework animation
-- optional UI services that cannot take down the DMR path
+- optional side services that cannot take down the DMR path
 
-Avoid Node.js runtime dependencies, SQL/Redis, Docker or a heavy web framework without a compelling architectural reason.
+Avoid introducing Node.js runtime dependencies, SQL/Redis, Docker, or a heavy frontend/server framework without a compelling architectural reason.
 
-## RF safety
+## 📡 RF safety
 
-Do not introduce install/update/config behavior that starts RF merely because source/service definitions changed.
+Do not introduce install/update/config behavior that starts RF merely because source or service definitions changed.
 
-Installer/updater/runtime-control behavior must preserve explicit operator intent. Starting RF should remain obvious and deliberate.
+Starting RF must remain obvious and deliberate. Installers/updaters must preserve the operator's prior active/enabled policy.
 
-## GitHub update architecture
+## 🔄 GitHub update architecture
 
-Keep these concepts separate:
+Keep managed source separate from deployed runtime:
 
 ```text
 /opt/ywd-hotspot/repo    managed source
-/opt/ywd-hotspot/app     live deployed application
+/opt/ywd-hotspot/app     deployed application
 ```
 
-Do not change the updater to run the appliance directly from a mutable Git working tree.
+Keep canonical-origin verification, dirty-content refusal, candidate staging/validation, protected backups, rollback behavior, and RF-state preservation unless a stronger replacement is demonstrated.
 
-Keep canonical-origin verification, dirty-tree refusal, candidate staging/validation and protected rollback behavior unless a stronger replacement is demonstrated.
+## ⚙️ Configuration rules
 
-## Configuration rules
+Canonical configuration:
 
-`/etc/ywd-hotspot/config.json` is canonical. Generated MMDVM-Host/DMRGateway INI files are outputs, not independent sources of truth.
+```text
+/etc/ywd-hotspot/config.json
+```
+
+Generated MMDVM-Host/DMRGateway INI files are outputs, not independent sources of truth.
 
 Configuration changes should retain:
 
 - normalization/validation
 - transactional apply
-- rollback history
+- rollback/history behavior
 - secret redaction
 - appropriate service-impact classification
 
-## Upstream pins
+## 📌 Upstream pins
 
-Do not casually update `pins.env` in the same change as unrelated UI/application work. An upstream radio-stack pin change alters the calibration/stability baseline and requires its own testing.
+Do not casually update `pins.env` in the same change as unrelated UI/docs/application work.
 
-## Script permissions and line endings
+An upstream radio-stack pin move changes the calibration/stability baseline and should be isolated and hardware-tested.
 
-```bash
-chmod +x INSTALL.sh UPDATE.sh UNINSTALL.sh GITHUB-UPDATE.sh MIGRATE-TO-GITHUB.sh
-chmod +x bin/ywd-hotspotctl lab/mmdvm-diag.sh lib/*.py
-```
+## ✅ Basic checks
 
-The repository `.gitattributes` forces LF text endings for scripts/source.
-
-## Basic checks
-
-Before a PR, run at least:
+Before a PR or checkpoint, run at least:
 
 ```bash
-bash -n INSTALL.sh UPDATE.sh UNINSTALL.sh GITHUB-UPDATE.sh MIGRATE-TO-GITHUB.sh
-bash -n lab/mmdvm-diag.sh bin/ywd-hotspotctl
+bash -n \
+  INSTALL.sh INSTALL-core.sh \
+  UPDATE.sh UPDATE-core.sh \
+  GITHUB-UPDATE.sh GITHUB-UPDATE-core.sh \
+  MIGRATE-TO-GITHUB.sh MIGRATE-TO-GITHUB-core.sh \
+  UNINSTALL.sh \
+  bin/ywd-hotspotctl bin/ywd-hotspotctl-core bin/ywd-ui.sh \
+  lab/mmdvm-diag.sh
+
 python3 -m py_compile lib/*.py
 ```
 
-If available:
+If Node.js is available:
 
 ```bash
 node --check web/app.js
+node --check web/app-core.js
+node --check web/talkgroups.js
+node --check web/ui-polish.js
 ```
 
 Remove generated `__pycache__` before committing; `.gitignore` excludes it.
 
-Changes that touch systemd/sudoers/config generation/install/update/RF behavior should also be exercised on an actual Pi test installation before being called ready.
+Changes touching systemd, sudoers, config generation, install/update, or RF behavior still need a real Pi test before being called known-good.
 
-## Bug reports
+## 🎨 WebUI changes
 
-A useful report includes version, branch/commit (`ywd-hotspotctl source`), Raspberry Pi model/OS, MMDVM firmware, what changed immediately before the issue, expected/actual behavior, and sanitized diagnostics where relevant.
+The dashboard intentionally uses plain HTML/CSS/JS and a restrictive CSP.
 
-Never attach a raw protected config/update backup or reusable credential.
+For UI polish:
+
+- prefer same-origin external CSS/JS
+- do not weaken CSP just to make styling easier
+- keep animations small and browser-side
+- preserve responsive behavior on narrow mobile screens
+- avoid new polling loops for purely visual features
+- preserve `prefers-reduced-motion` where practical
+
+## 🐛 Bug reports
+
+Useful reports include:
+
+- version + branch/commit (`ywd-hotspotctl source`)
+- Raspberry Pi model / OS
+- MMDVM HAT + firmware
+- browser/device for WebUI issues
+- what changed immediately before the problem
+- expected vs actual behavior
+- sanitized diagnostics when relevant
+
+Never attach a raw protected backup or reusable credential.
+
+## 🌿 Development workflow
+
+New work normally lands on `dev`, gets validated, then is exercised on the test hotspot. When a build is explicitly confirmed, a checkpoint branch can preserve that exact state before the next experiment begins.
+
+See **[docs/GITHUB-SETUP.md](docs/GITHUB-SETUP.md)** for the branch/update model.

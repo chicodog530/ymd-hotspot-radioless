@@ -1,17 +1,23 @@
-# Talkgroup Manager
+# 📻 Talkgroup Manager
 
-YWD-Hotspot includes a lightweight BrandMeister Talkgroup Manager on the `dev` channel beginning with `0.1.0-alpha8-dev`.
+[← Docs index](README.md) · [Project README](../README.md) · [Security](../SECURITY.md)
 
-The manager is designed around one safety rule: **browsing and planning do not change BrandMeister.** Static talkgroup changes happen only after the operator reviews a change plan, presses **APPLY PLAN**, and confirms it.
+---
 
-## BrandMeister behavior
+YWD-Hotspot's BrandMeister Talkgroup Manager is built around one safety rule:
 
-BrandMeister distinguishes between static and dynamic talkgroups:
+> **Browsing and planning do not change BrandMeister.**
 
-- **Static** talkgroups remain subscribed on the hotspot until they are removed.
-- **Dynamic** talkgroups are created by RF activity and can be cleared with **DROP ALL DYNAMIC**.
+Static talkgroup changes happen only after the operator reviews a change plan, presses **APPLY PLAN**, and confirms it.
 
-YWD-Hotspot uses the BrandMeister API v2 key already configured with:
+## 🎛️ BrandMeister behavior
+
+BrandMeister distinguishes between:
+
+- **Static** talkgroups — remain subscribed until removed
+- **Dynamic** talkgroups — created by RF activity and can be cleared with **DROP ALL DYNAMIC**
+
+YWD-Hotspot uses the BrandMeister API v2 key configured with:
 
 ```bash
 sudo ywd-hotspotctl bm-api-key
@@ -21,65 +27,71 @@ The API key stays on the Pi and is never returned to browser JavaScript.
 
 For this simplex hotspot, BrandMeister API talkgroup operations use slot `0`.
 
-## Talkgroup Manager page
+## 🧭 Talkgroup Manager page
 
-The WebUI has a dedicated **TALKGROUPS** tab with:
+The dedicated **TALKGROUPS** tab includes:
 
-- current static subscriptions
-- current dynamic subscriptions
-- BrandMeister directory search by talkgroup ID or name
-- favorites
-- saved static sets
-- a desired static-talkgroup change plan
-- a preview of additions/removals before apply
-- explicit confirmation before BrandMeister is changed
-- Drop All Dynamic
+| Area | Purpose |
+|---|---|
+| Current Static | Live BrandMeister static subscriptions |
+| Current Dynamic | Live dynamic subscriptions |
+| Directory Search | Search public BrandMeister TG IDs/names |
+| Favorites | Browser-local quick-access TGs |
+| Saved Static Sets | Browser-local named desired plans |
+| Static Change Plan | Preview desired adds/removals before apply |
+| Drop All Dynamic | Clear dynamic subscriptions with confirmation |
 
-The older direct static-TG controls remain available on the Control page while the Talkgroup Manager is being tested.
+The older direct static-TG controls remain available on the Control page.
 
-## Directory search and Pi Zero performance
+## 🔎 Directory search + Pi Zero performance
 
-The manager searches the public BrandMeister v2 talkgroup directory through the local YWD-Hotspot dashboard. The browser does not talk directly to BrandMeister.
+The browser searches through the local YWD dashboard; it does not talk directly to BrandMeister.
 
 To stay lightweight on the original Pi Zero W:
 
 - the full directory is downloaded only on demand
-- the normalized directory is cached at `/var/lib/ywd-hotspot/talkgroup-directory.json`
-- the normal cache lifetime is 24 hours
-- searches use the local cached copy
-- a manual **REFRESH DIRECTORY** is available while control mode is unlocked
-- if BrandMeister is temporarily unavailable, a stale local directory can still be used for search
+- normalized data is cached at `/var/lib/ywd-hotspot/talkgroup-directory.json`
+- normal cache lifetime is 24 hours
+- repeated searches use the local cache
+- **REFRESH DIRECTORY** is available while control mode is unlocked
+- a stale cache can still be used if BrandMeister directory lookup is temporarily unavailable
 
-The directory cache contains public talkgroup IDs/names only; it contains no API key or hotspot password.
+The cache contains public TG IDs/names only. It contains no API key or hotspot password.
 
-## Static change plan
+## 📝 Static change plan
 
-Opening the Talkgroup Manager initializes the desired plan from the hotspot's current BrandMeister static subscriptions.
+Opening the manager initializes the desired plan from the hotspot's current static subscriptions.
 
-Adding/removing a talkgroup in the manager changes only the local browser plan. A plan might look like:
+Adding/removing a TG in the manager edits only the local browser plan.
+
+Example:
 
 ```text
 ADD    3106, 31073
 REMOVE 91
 ```
 
-Nothing is sent to BrandMeister until **APPLY PLAN** is pressed and the confirmation dialog is accepted.
+Nothing is sent upstream until **APPLY PLAN** is pressed and the confirmation dialog is accepted.
 
-When applying a plan, YWD-Hotspot sends additions first. Existing static subscriptions are therefore not removed merely because BrandMeister rejected a new addition. Removals are attempted only after additions succeed.
+### Apply order
 
-If an API operation fails partway through, the manager stops the batch and refreshes live BrandMeister state rather than pretending the whole plan succeeded.
+YWD-Hotspot sends **additions first**.
 
-## Favorites
+That means existing statics are not removed merely because BrandMeister rejected a new addition. Removals are attempted only after additions succeed.
 
-Search results can be starred as favorites for quick access.
+If an API operation fails partway through, the batch stops and live BrandMeister state is refreshed rather than pretending the whole plan succeeded.
 
-Favorites are stored in browser `localStorage`. They are convenience metadata only and do not change BrandMeister.
+## ⭐ Favorites
 
-Because they are browser-local, favorites saved on one phone/browser will not automatically appear on another device. A future build may optionally move favorites into appliance-side storage.
+Search results can be starred for quick access.
 
-## Saved static sets
+Favorites live in browser `localStorage` and are convenience metadata only. They never change BrandMeister on their own.
 
-A desired plan can be saved with a name such as:
+Because they are browser-local, a favorite saved on one phone/browser does not automatically appear on another device.
+
+## 💾 Saved static sets
+
+A desired plan can be saved with names such as:
 
 ```text
 Local
@@ -88,9 +100,11 @@ Nets
 Experiment
 ```
 
-Saved sets are also browser-local. Loading a saved set replaces the current **plan only**. It does not immediately alter BrandMeister; **APPLY PLAN** and confirmation are still required.
+Saved sets are also browser-local.
 
-## Existing CLI controls
+Loading a set changes the **plan only**. It does not alter BrandMeister until **APPLY PLAN** is confirmed.
+
+## 💻 CLI controls
 
 Direct BrandMeister controls remain available:
 
@@ -102,14 +116,28 @@ sudo ywd-hotspotctl bm dropqso
 sudo ywd-hotspotctl bm dropdyn
 ```
 
-## Security
+## 🔐 Security boundary
 
-Talkgroup directory search is read-only and does not require the BrandMeister API key.
+Directory search is read-only and does not require exposing the BrandMeister API key to the browser.
 
-Changing static subscriptions or clearing dynamic routes still requires:
+Changing subscriptions or clearing dynamic routes requires:
 
 1. a configured BrandMeister API key
-2. an unlocked YWD-Hotspot WebUI control session
-3. the existing authenticated dashboard API
+2. an unlocked YWD-Hotspot control session
+3. the authenticated local dashboard API
+4. explicit confirmation for destructive/batch actions
 
-The Talkgroup Manager never exposes the BrandMeister API key to the browser.
+The Talkgroup Manager never returns the BrandMeister API key to browser JavaScript.
+
+## 🧪 Good test flow
+
+When testing a new build:
+
+1. verify Current Static/Dynamic state
+2. search a known TG by number
+3. search a TG by name
+4. add/remove TGs from the plan and verify live state does not change
+5. cancel an **APPLY PLAN** confirmation
+6. apply a harmless intended change
+7. confirm live BrandMeister state refreshes correctly
+8. save/load a named set and verify it changes the plan only

@@ -23,6 +23,7 @@ assets/branding/ywd-hotspot-logo-master.png
 bin/ywd-hotspotctl
 bin/ywd-hotspotctl-core
 bin/ywd-ui.sh
+docs/README.md
 docs/ARCHITECTURE.md
 docs/CALIBRATION.md
 docs/GITHUB-SETUP.md
@@ -58,4 +59,5 @@ web/app.js
 web/index.html
 web/style.css
 web/talkgroups.js
+web/ui-polish.css
 web/ui-polish.js

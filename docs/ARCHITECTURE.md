@@ -1,63 +1,59 @@
-# YWD-Hotspot Architecture
+# 🧱 YWD-Hotspot Architecture
+
+[← Docs index](README.md) · [Project README](../README.md) · [Security](../SECURITY.md) · [Development notes](GITHUB-SETUP.md)
+
+---
 
 YWD-Hotspot keeps the actual DMR transport path deliberately small and separates presentation/admin features from RF operation.
 
-## RF path
+## 📡 RF path
 
 ```text
 DMR radio
-   |
-   v
+   │
+   ▼
 MMDVM HAT
-   |
-   v
+   │
+   ▼
 MMDVM-Host
-   |
-   v
+   │
+   ▼
 DMRGateway
-   |
-   v
+   │
+   ▼
 BrandMeister
 ```
 
-The core RF path does not depend on the dashboard, OLED or activity presentation continuing to run.
+The core RF path does not depend on the dashboard, OLED, or activity presentation continuing to run.
 
-## Side services
+## 🧩 Side services
 
-```text
-ywd-activity.service
-    Parses MMDVM-Host activity into lightweight cached state/Last Heard data.
+| Service | Role |
+|---|---|
+| `ywd-activity.service` | Parses MMDVM-Host activity into bounded cached state / Last Heard data |
+| `ywd-dashboard.service` | Python stdlib HTTP dashboard/API; reads cached state and routes validated writes through the admin helper |
+| `ywd-oled.service` | Optional I2C status/activity display; failure must not interrupt DMR |
+| `ywd-dmrid-update.timer` | Periodically refreshes lightweight RadioID data when due |
 
-ywd-dashboard.service
-    Python standard-library HTTP dashboard/API. Reads cached state and routes
-    validated writes through the privileged admin helper.
+## 🔐 Privilege boundary
 
-ywd-oled.service
-    Optional I2C display. Failure must not interrupt DMR.
+The dashboard runs as the restricted `ywd-hotspot` user.
 
-ywd-dmrid-update.timer/service
-    Periodically refreshes the lightweight RadioID lookup file when due.
-```
-
-## Privilege boundary
-
-The dashboard runs as the restricted `ywd-hotspot` service user.
-
-Privileged operations are funneled through:
+Privileged browser operations are funneled through:
 
 ```text
 /usr/local/libexec/ywd-hotspot-admin
 ```
 
-and the restricted sudo policy:
+with the restricted sudo policy:
 
 ```text
 /etc/sudoers.d/ywd-hotspot
 ```
 
-The browser must never directly edit MMDVM-Host.ini/DMRGateway.ini or directly execute arbitrary shell commands.
+The browser must never directly execute arbitrary shell text or directly edit generated MMDVM-Host/DMRGateway INI files.
 
-## Canonical configuration
+## ⚙️ Canonical configuration
 
 Source of truth:
 
@@ -65,124 +61,143 @@ Source of truth:
 /etc/ywd-hotspot/config.json
 ```
 
-Generated files:
+Generated outputs:
 
 ```text
 /etc/ywd-hotspot/MMDVM-Host.ini
 /etc/ywd-hotspot/DMRGateway.ini
 ```
 
-The workflow is:
+Configuration flow:
 
 ```text
-browser/CLI input
-      |
-      v
+browser / CLI input
+        │
+        ▼
 validate + normalize
-      |
-      v
+        │
+        ▼
 transactional canonical JSON update
-      |
-      v
+        │
+        ▼
 regenerate temporary INIs
-      |
-      v
-atomic apply / appropriate service action
+        │
+        ▼
+atomic apply / scoped service action
 ```
 
-Normal configuration history is retained separately so changes can be rolled back.
+Normal configuration history is retained separately for rollback.
 
-## Credential separation
+## 🔑 Credential separation
 
 YWD-Hotspot treats these as different secrets:
 
 1. BrandMeister Hotspot Security password — used by DMRGateway
-2. BrandMeister API v2 key — used server-side for BM controls
-3. local dashboard web-control password — unlocks LAN write/admin controls
+2. BrandMeister API v2 key — server-side BM control actions
+3. local WebUI control password — unlocks LAN write/admin controls
 
-The API key and password material must never be emitted in browser-readable configuration, support summaries or diagnostic exports.
+Reusable secret material must not appear in browser-readable config, support summaries, or public diagnostic bundles.
 
-## Runtime/state paths
+## 📁 Runtime/state layout
 
 ```text
-/etc/ywd-hotspot/config.json
-/etc/ywd-hotspot/MMDVM-Host.ini
-/etc/ywd-hotspot/DMRGateway.ini
-/etc/ywd-hotspot/bm-api.key
-/etc/ywd-hotspot/web-auth.json
-/etc/ywd-hotspot/build-info.json
+/etc/ywd-hotspot/
+  config.json
+  MMDVM-Host.ini
+  DMRGateway.ini
+  bm-api.key
+  web-auth.json
+  build-info.json
+  update-channel
 
-/var/lib/ywd-hotspot/DMRIds.dat
-/var/lib/ywd-hotspot/lastheard.json
-/var/lib/ywd-hotspot/calibration.json
-/var/lib/ywd-hotspot/calibration-baseline.json
-/var/lib/ywd-hotspot/geocode-cache.json
-/var/lib/ywd-hotspot/config-history.json
-/var/lib/ywd-hotspot/audit.json
-/var/lib/ywd-hotspot/private/
+/var/lib/ywd-hotspot/
+  DMRIds.dat
+  lastheard.json
+  calibration.json
+  calibration-baseline.json
+  geocode-cache.json
+  talkgroup-directory.json
+  config-history.json
+  audit.json
+  private/
 
 /var/backups/ywd-hotspot/
 ```
 
 Private runtime/config backups can contain credentials and must not be published.
 
-## GitHub source/deployment separation
-
-Alpha6 keeps source management outside the live runtime:
+## 🌿 GitHub source vs live runtime
 
 ```text
 /opt/ywd-hotspot/repo    root-owned managed Git checkout
-/opt/ywd-hotspot/app     deployed application copy (no .git)
+/opt/ywd-hotspot/app     deployed application copy; no .git
 ```
 
-The normal update path is:
+Update flow:
 
 ```text
 GitHub fetch
-   |
-   v
+   │
+   ▼
 resolve target commit
-   |
-   v
+   │
+   ▼
 stage + validate candidate
-   |
-   v
+   │
+   ▼
 protected app/config backup
-   |
-   v
+   │
+   ▼
 transactional UPDATE.sh
-   |
-   v
-restore prior RF service policy
-   |
-   v
+   │
+   ▼
+restore prior RF/service policy
+   │
+   ▼
 advance managed checkout after success
 ```
 
-Network failure, a dirty managed checkout, or candidate-validation failure occurs before the live application is touched. The updater never recompiles pinned MMDVM-Host/DMRGateway during a normal YWD application update.
+Network failure, dirty source, or candidate-validation failure occurs before the live application is touched.
 
-Build provenance is written to `/etc/ywd-hotspot/build-info.json` and is intentionally non-secret so it can be displayed by the dashboard/About page and CLI.
+## 🌐 WebUI layers
 
-## Dashboard design constraints
+The browser side intentionally stays small:
 
-The original Pi Zero W is the performance budget. Prefer:
+```text
+style.css          base dashboard theme
+app-core.js        established dashboard behavior
+talkgroups.js      Talkgroup Manager layer
+ui-polish.css      CSP-safe micro-polish / animation / busy states
+ui-polish.js       themed confirms + lightweight UX wrappers
+app.js             tiny loader
+```
+
+The UI uses same-origin external assets so the dashboard can retain a restrictive Content-Security-Policy without `unsafe-inline` styling.
+
+Visual effects are browser-side. They do not add a daemon, database, framework, or high-frequency backend polling loop.
+
+## 🥧 Pi Zero performance budget
+
+Prefer:
 
 - Python standard library
 - small long-running collectors
-- event/cached state instead of repeated expensive polling
+- cached/event state over repeated expensive shelling
 - plain HTML/CSS/JS
-- CSS-only animation
+- CSS animation
 - bounded local files
 
-Avoid turning the project into a tiny Kubernetes convention cosplay:
+Avoid turning a Pi Zero into infrastructure cosplay:
 
 - no Node.js runtime
 - no React/Vue requirement
 - no SQL server
 - no Redis
 - no Docker dependency
-- no heavyweight graphing framework unless a real need appears
+- no heavyweight graphing framework without a real need
 
-## RF safety invariant
+## 📡 RF safety invariant
 
-Install, update, restart and config-apply paths must preserve the operator's intended RF state. A UI update is never a valid excuse to unexpectedly start a transmitter.
+Install, update, config-apply, and runtime-control paths must preserve explicit operator intent.
+
+A UI change, Git pull, dashboard restart, or software update is **never** permission to unexpectedly start a transmitter.
