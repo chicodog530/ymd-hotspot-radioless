@@ -2,9 +2,33 @@
 
 YWD-Hotspot is currently in alpha development. This changelog summarizes project checkpoints rather than promising semantic-versioning stability.
 
+## 0.1.0-alpha8-dev — Talkgroup Manager
+
+**Status: active `dev` test build. `main` remains on Alpha6.**
+
+Highlights:
+
+- dedicated **TALKGROUPS** WebUI page
+- live BrandMeister static and dynamic subscription display
+- public BrandMeister v2 talkgroup directory search by ID/name
+- Pi-side normalized talkgroup-directory cache with a 24-hour normal lifetime
+- stale-cache fallback if BrandMeister directory lookup is temporarily unavailable
+- manual directory refresh only from an unlocked control session
+- desired static-TG change plan separate from live BrandMeister state
+- explicit preview of additions/removals before apply
+- explicit confirmation before a static plan is sent to BrandMeister
+- additions are attempted before removals so a failed add does not first destroy existing statics
+- browser-local favorites
+- browser-local named static sets; loading a set changes the plan only, never BrandMeister directly
+- existing authenticated BrandMeister add/remove/drop endpoints and server-side API key storage are reused
+- Alpha7 dashboard/application code retained as `dashboard_core.py` / `app-core.js`, with the Talkgroup Manager layered on top for a smaller and easier-to-review dev change
+- `docs/TALKGROUPS.md` added
+
+No MMDVM-Host or DMRGateway changes are included in this build.
+
 ## 0.1.0-alpha7-dev — Dev Channel + Guided RX Calibration
 
-**Status: active development branch only. Not promoted to `main`.**
+**Status: user-tested successfully before Alpha8-dev began. A checkpoint branch is retained as `dev-alpha7-known-good`.**
 
 Highlights:
 
@@ -30,7 +54,7 @@ Normal Alpha7-dev application updates do not rebuild the pinned MMDVM-Host or DM
 
 ## 0.1.0-alpha6 — GitHub Integration + About
 
-**Status: current development/test build. Do not treat as known-good until separately confirmed.**
+**Status: current `main` development/test build. Do not treat as known-good until separately confirmed.**
 
 ### Migration hotfix — 2026-08-15
 
