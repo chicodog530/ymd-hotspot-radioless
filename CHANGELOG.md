@@ -2,9 +2,30 @@
 
 YWD-Hotspot is currently in alpha development. This changelog summarizes project checkpoints rather than promising semantic-versioning stability.
 
+## 0.1.0-alpha9-dev — Console + UI Polish
+
+**Status: active `dev` polish build. `dev-alpha8-known-good` preserves the user-tested Talkgroup Manager checkpoint.**
+
+Highlights:
+
+- shared lightweight terminal presentation helper in `bin/ywd-ui.sh`
+- ANSI cyan/blue/magenta/green/yellow/red output matching the WebUI palette as closely as normal terminals allow
+- color automatically disabled when stdout is not a terminal or `NO_COLOR` is set
+- installer, updater, GitHub migration and GitHub-update entry points now show a YWD-Hotspot / KJ6YWD RF-themed ASCII banner
+- script wrappers preserve the existing installer/updater logic underneath rather than rewriting RF/update behavior during a cosmetic pass
+- user-facing `ywd-hotspotctl` now has a themed control-console menu and colorized read-only status/source/health/calibration output
+- machine-readable calibration JSON/CSV export remains plain and uncolored
+- themed custom WebUI confirmation modal added with mobile-friendly sizing and danger/warning variants
+- in-app confirmation flows now use the themed modal for RF start/stop/restart, reboot, calibration changes, config restore/apply, talkgroup removal/plan apply and saved-set replacement/deletion
+- existing toast notifications receive a small visual polish pass
+- browser `beforeunload` remains native intentionally; browsers do not permit a custom modal to replace the security-controlled close/reload warning
+- no new daemon, framework, polling loop or server-side runtime cost was added for the modal/toast polish
+
+No MMDVM-Host or DMRGateway changes are included in this build.
+
 ## 0.1.0-alpha8-dev — Talkgroup Manager
 
-**Status: active `dev` test build. `main` remains on Alpha6.**
+**Status: user-tested successfully before Alpha9-dev began. A checkpoint branch is retained as `dev-alpha8-known-good`.**
 
 Highlights:
 
