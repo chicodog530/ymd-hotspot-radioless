@@ -47,6 +47,9 @@
     try {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 8000 });
       nextAudioTime = audioCtx.currentTime;
+      if (typeof audioCtx.setSinkId === 'function' && dom.speakerSelect.value) {
+          audioCtx.setSinkId(dom.speakerSelect.value).catch(console.error);
+      }
 
       // Setup WebSocket
       const wsUrl = `ws://${window.location.hostname}:8081/`;
@@ -150,6 +153,9 @@
     if (!audioCtx) {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 8000 });
       nextAudioTime = audioCtx.currentTime;
+      if (typeof audioCtx.setSinkId === 'function' && dom.speakerSelect.value) {
+          audioCtx.setSinkId(dom.speakerSelect.value).catch(console.error);
+      }
     }
     if (audioCtx.state === 'suspended') {
       audioCtx.resume();
@@ -183,6 +189,16 @@
   dom.volumeInput.addEventListener('input', (e) => {
     // We could add a gain node if we wanted
     console.log("Volume set to", e.target.value);
+  });
+  dom.speakerSelect.addEventListener('change', async (e) => {
+    if (audioCtx && typeof audioCtx.setSinkId === 'function') {
+      try {
+        await audioCtx.setSinkId(e.target.value);
+        console.log("Audio device updated to", e.target.value);
+      } catch (err) {
+        console.error("Could not set audio device:", err);
+      }
+    }
   });
 
   // Init
