@@ -9,14 +9,15 @@ if declare -F ywd_banner >/dev/null; then
   ywd_info "MMDVM-Host / DMRGateway are not recompiled by normal app updates."
 fi
 
-# Nested console helpers are installed after the core updater returns, so check
-# them here before any live service/config work begins.
+# Nested console/update helpers are installed after the core updater returns, so
+# validate them here before any live service/config work begins.
 if [[ -d "$SELF/lib/console" ]]; then
   python3 -m py_compile "$SELF/lib/console/ywd-system-info.py"
   for f in ywd-info-wrapper.sh ywd-logs.sh ywd-env.sh ywd-prompt.sh ywd-motd.sh; do
     bash -n "$SELF/lib/console/$f"
   done
 fi
+python3 -m py_compile "$SELF/lib/update_runner.py" "$SELF/lib/update_admin.py"
 [[ -f "$SELF/lib/system_branding.sh" ]] && bash -n "$SELF/lib/system_branding.sh"
 
 CORE="$SELF/UPDATE-core.sh"
@@ -26,8 +27,8 @@ CORE="$SELF/UPDATE-core.sh"
 # Run the established updater first. On M4 OS images the core temporarily
 # installs admin.py at ywd-hotspot-admin while it performs its normal migration
 # and init-applied work. After a successful update, restore the tested M4
-# dispatcher layout so setup-finish remains isolated behind its dedicated
-# privileged helper. Generic installs without the M4 setup payload are unchanged.
+# dispatcher layout so setup-finish and software updates remain isolated behind
+# their dedicated privileged helpers.
 if declare -F ywd_run_colored >/dev/null; then
   ywd_run_colored bash "$CORE" "$@"
 else
@@ -37,12 +38,15 @@ fi
 if [[ -f "$SELF/lib/admin_dispatch.sh" && -f "$SELF/lib/setup_admin.py" ]]; then
   sudo install -o root -g root -m 0755 "$SELF/lib/admin.py" /usr/local/libexec/ywd-hotspot-admin-core
   sudo install -o root -g root -m 0755 "$SELF/lib/setup_admin.py" /usr/local/libexec/ywd-hotspot-setup-admin
+  sudo install -o root -g root -m 0755 "$SELF/lib/update_admin.py" /usr/local/libexec/ywd-hotspot-update-admin
+  sudo install -o root -g root -m 0755 "$SELF/lib/update_runner.py" /usr/local/libexec/ywd-update-runner
   sudo install -o root -g root -m 0755 "$SELF/lib/admin_dispatch.sh" /usr/local/libexec/ywd-hotspot-admin
   [[ -f "$SELF/lib/setup_entry.sh" ]] && sudo chmod 0755 "$SELF/lib/setup_entry.sh"
-  sudo chmod 0755 "$SELF/lib/admin_dispatch.sh" "$SELF/lib/setup_admin.py"
+  sudo chmod 0755 "$SELF/lib/admin_dispatch.sh" "$SELF/lib/setup_admin.py" "$SELF/lib/update_admin.py" "$SELF/lib/update_runner.py"
   if command -v visudo >/dev/null 2>&1 && [[ -f /etc/sudoers.d/ywd-hotspot ]]; then
     sudo visudo -cf /etc/sudoers.d/ywd-hotspot >/dev/null
   fi
+  sudo systemctl daemon-reload
 fi
 
 # Apply the same console/login identity used by YWD-Hotspot OS images. The
