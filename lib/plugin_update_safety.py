@@ -17,8 +17,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-STATE = Path('/etc/ywd-hotspot/plugin-state.json')
-UNIT_TEMPLATE = Path('/etc/systemd/system/ywd-plugin@.service')
+STATE = Path(os.environ.get('YWD_PLUGIN_STATE', '/etc/ywd-hotspot/plugin-state.json'))
+UNIT_TEMPLATE = Path(os.environ.get('YWD_PLUGIN_UNIT_TEMPLATE', '/etc/systemd/system/ywd-plugin@.service'))
 ID_RE = re.compile(r'^[a-z0-9][a-z0-9-]{0,39}$')
 UNIT_RE = re.compile(r'^ywd-plugin@([a-z0-9][a-z0-9-]{0,39})\.service$')
 
@@ -206,7 +206,13 @@ def restore(snapshot_path, target_lib):
     ids = set(snapshot.get('services', {})) | unit_ids_from_systemd() | valid_service
     for ident in sorted(i for i in ids if ID_RE.fullmatch(str(i))):
         unit = f'ywd-plugin@{ident}.service'
-        run(['systemctl', 'disable', '--now', unit], timeout=25)
+        p = run(['systemctl', 'disable', '--now', unit], timeout=25)
+        # A nonexistent inactive instance is harmless; any other lingering failure
+        # is recorded and the plugin will not be reactivated below unless its own
+        # requested restore operations succeed.
+        if p.returncode != 0 and unit_state(ident)['active']:
+            warnings.append(f'{ident}: could not force service inactive before restore')
+            restored_flags[ident] = False
 
     if master:
         service_snapshot = snapshot.get('services') if isinstance(snapshot.get('services'), dict) else {}
@@ -215,16 +221,19 @@ def restore(snapshot_path, target_lib):
                 continue
             previous = service_snapshot.get(ident) if isinstance(service_snapshot.get(ident), dict) else {}
             unit = f'ywd-plugin@{ident}.service'
+
             if bool(previous.get('enabled', False)):
                 p = run(['systemctl', 'enable', unit], timeout=20)
                 if p.returncode != 0:
-                    warnings.append(f'{ident}: could not restore boot enable state')
+                    warnings.append(f'{ident}: could not restore boot enable state; plugin left disabled')
+                    restored_flags[ident] = False
+                    run(['systemctl', 'disable', '--now', unit], timeout=20)
+                    continue
+
             if bool(previous.get('active', False)):
                 p = run(['systemctl', 'start', unit], timeout=25)
                 if p.returncode != 0:
-                    warnings.append(f'{ident}: could not restore active runtime state')
-                    # Runtime restoration failure is fail-closed: disable plugin
-                    # activation so the UI cannot claim it is safely restored.
+                    warnings.append(f'{ident}: could not restore active runtime state; plugin left disabled')
                     restored_flags[ident] = False
                     run(['systemctl', 'disable', '--now', unit], timeout=20)
 
@@ -234,12 +243,9 @@ def restore(snapshot_path, target_lib):
 
 def stable_cleanup(snapshot_path, current_lib):
     # The service instances were already quiesced before the non-plugin target
-    # updater ran. Repeat defensively, clear all activation state, then remove the
-    # generic template so stable branches have no live plugin service surface.
-    try:
-        quiesce(snapshot_path, current_lib)
-    except Exception:
-        pass
+    # updater ran. Repeat defensively and fail if anything somehow became active
+    # again; never claim a plugin-free target while a plugin service is running.
+    quiesce(snapshot_path, current_lib)
     state = read_state_raw()
     flags = {ident: False for ident in state.get('plugins', {})}
     snapshot = load_snapshot(snapshot_path)
@@ -251,7 +257,7 @@ def stable_cleanup(snapshot_path, current_lib):
         UNIT_TEMPLATE.unlink()
     except FileNotFoundError:
         pass
-    run(['systemctl', 'daemon-reload'], timeout=20)
+    run(['systemctl', 'daemon-reload'], timeout=20, check=True)
     run(['systemctl', 'reset-failed'], timeout=10)
     return {'ok': True, 'master_enabled': False}
 
