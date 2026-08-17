@@ -12,8 +12,9 @@
 |---|---|
 | 🚀 Install a new hotspot | **[Installation](INSTALL.md)** |
 | 🧱 Build a complete YWD-Hotspot OS image | **[OS Development](OS-DEVELOPMENT.md)** |
+| 🧩 Understand the experimental plugin framework | **[Plugins](PLUGINS.md)** |
 | 🔁 Move an older archive install to GitHub | **[Installation](INSTALL.md#-existing-install--github-management)** |
-| 🔄 Check/apply updates or switch `main` / `dev` | **[Upgrading](UPGRADING.md)** |
+| 🔄 Check/apply updates or switch `main` / `dev` / `dev-plugins` | **[Upgrading](UPGRADING.md)** |
 | 🛠️ Recover from an update/migration problem | **[Upgrading](UPGRADING.md#-recovery-and-rollback)** |
 | 📻 Manage BrandMeister static/dynamic talkgroups | **[Talkgroup Manager](TALKGROUPS.md)** |
 | 📟 Configure LIVE DMR gauges and OLED runtime display | **[Display + Instrumentation](DISPLAY.md)** |
@@ -37,17 +38,19 @@ A few project rules show up everywhere because they are intentional design const
 - enhanced WebUI instrumentation is optional; Basic mode preserves the lightweight status UI.
 - the original Raspberry Pi Zero W remains the performance budget.
 - the OS builder packages the application from the same repository commit; normal app updates do not require rebuilding an image.
+- the experimental plugin subsystem is globally disableable and must leave core DMR operation intact when disabled.
 
 ## 🌿 Branch model
 
 | Branch | Purpose |
 |---|---|
 | `main` | promoted/conservative project line |
-| `dev` | active application development and Pi test line |
-| `dev-alpha12.1-known-good` | proven Alpha12.1 checkpoint |
-| temporary `dev-os-*` branches | image-builder/OS integration cut from current `dev`, then merged back after physical validation |
+| `dev` | current unified application + OS-builder baseline |
+| `dev-alpha12.2-os-integrated-known-good` | physically tested unified app/OS checkpoint |
+| `dev-plugins` | experimental Plugin API / Plugin Manager development line |
+| temporary `dev-os-*` branches | image-builder/OS experiments cut from current `dev`, then merged back only after physical validation |
 
-The historical long-lived `dev-os` branch is retained as reference; do not merge it wholesale into current `dev`. The installed appliance remembers its selected `main`/`dev` application update channel. See **[Upgrading](UPGRADING.md)** and **[OS Development](OS-DEVELOPMENT.md)**.
+The historical long-lived `dev-os` branch is retained as reference; do not merge it wholesale into current `dev`. The installed appliance can remember `main`, `dev`, or `dev-plugins` as its update channel. See **[Upgrading](UPGRADING.md)**, **[OS Development](OS-DEVELOPMENT.md)**, and **[Plugins](PLUGINS.md)**.
 
 ## 🆘 Useful first commands
 
