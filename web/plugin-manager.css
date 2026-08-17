@@ -20,12 +20,13 @@
 .plugin-meta b{color:var(--text);font-weight:600;text-align:right}
 .plugin-caps{display:flex;gap:5px;flex-wrap:wrap;margin:8px 0}
 .plugin-cap{border:1px solid var(--line);border-radius:999px;padding:3px 7px;color:var(--cyan);font-size:9px}
+.plugin-runtime-actions{border-top:1px solid #17333d;padding-top:10px}
 .plugin-config{border-top:1px solid #17333d;margin-top:12px;padding-top:10px}
 .plugin-config summary{margin-bottom:10px}
 .plugin-config-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
 .plugin-config .field.check{justify-content:center;padding-bottom:0}
 .plugin-help{font-size:9px;color:var(--muted);line-height:1.4}
-.plugin-result{margin-top:9px;border:1px solid var(--line);border-radius:8px;background:#041017;padding:8px;font-size:10px;color:var(--muted);white-space:pre-wrap;word-break:break-word}
+.plugin-result{margin-top:9px;border:1px solid var(--line);border-radius:8px;background:#041017;padding:8px;font-size:10px;color:var(--muted);white-space:pre-wrap;word-break:break-word;max-height:260px;overflow:auto}
 .plugin-result.good{border-color:#2b7f54;color:var(--good)}
 .plugin-result.bad{border-color:#7d3340;color:var(--bad)}
 .plugin-empty{text-align:center;padding:30px;color:var(--muted)}
