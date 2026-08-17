@@ -40,6 +40,7 @@ class AudioBridge:
         self.dmr_id = 0
         self.callsign = "NOCALL"
         self.connected_clients = set()
+        self.is_receiving = False
         self.load_config()
         
     def load_config(self):
@@ -131,7 +132,16 @@ class AudioBridge:
                 if data.startswith(b"DMRD"):
                     logging.info("DMRGateway Login Accepted!")
                 elif data.startswith(b"DMRV"):
-                    # Format: "DMRV" (4s), seq (B), src (I), dst (I), type (B), slot (B)
+                    if not self.is_receiving:
+                        self.is_receiving = True
+                        if self.connected_clients:
+                            websockets.broadcast(self.connected_clients, json.dumps({
+                                "type": "rx_start",
+                                "callsign": "Network",
+                                "tg": "Audio"
+                            }))
+                    self.last_voice = now
+                    
                     if len(data) >= 15:
                         ambe_data = data[15:42]
                         if ambe_data and self.connected_clients:
@@ -141,6 +151,13 @@ class AudioBridge:
                                 websockets.broadcast(self.connected_clients, pcm_bytes)
             except BlockingIOError:
                 pass
+                
+            if getattr(self, "is_receiving", False) and now - getattr(self, "last_voice", 0) > 1.5:
+                self.is_receiving = False
+                if self.connected_clients:
+                    websockets.broadcast(self.connected_clients, json.dumps({
+                        "type": "rx_stop"
+                    }))
             
             await asyncio.sleep(0.02)
 
