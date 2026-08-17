@@ -130,11 +130,14 @@ required=(
   VERSION INSTALL.sh INSTALL-core.sh UPDATE.sh UPDATE-core.sh UNINSTALL.sh
   GITHUB-UPDATE.sh GITHUB-UPDATE-core.sh MIGRATE-TO-GITHUB.sh MIGRATE-TO-GITHUB-core.sh
   bin/ywd-hotspotctl bin/ywd-hotspotctl-core bin/ywd-ui.sh lab/mmdvm-diag.sh
-  lib/dashboard.py lib/dashboard_core.py lib/dashboard_update.py lib/admin.py lib/update_admin.py lib/update_runner.py
-  lib/build_info.py lib/generate-config.py lib/migrate.py lib/config_model.py lib/oled.py lib/oled_owner.sh
+  lib/dashboard.py lib/dashboard_core.py lib/dashboard_update.py lib/dashboard_plugins.py
+  lib/admin.py lib/update_admin.py lib/update_runner.py lib/plugin_admin.py lib/admin_dispatch.sh
+  lib/build_info.py lib/generate-config.py lib/migrate.py lib/config_model.py lib/oled.py lib/oled_owner.sh lib/plugin_manager.py
+  lib/plugin_packages/system-info/plugin.json lib/plugin_packages/system-info/config.schema.json
   web/index.html web/app.js web/app-core.js web/talkgroups.js web/ui-polish.js web/ui-polish.css web/style.css
   web/update.js web/update.css web/update-progress.js
   web/instrumentation.js web/instrumentation-bootstrap.js web/instrumentation.css
+  web/plugin-manager.js web/plugin-manager.css
   sudoers/ywd-hotspot systemd/ywd-mmdvmhost.service systemd/ywd-dmrgateway.service
   systemd/ywd-dashboard.service systemd/ywd-activity.service systemd/ywd-oled.service systemd/ywd-update.service
   assets/branding/ywd-hotspot-badge-256.webp
@@ -143,10 +146,22 @@ for f in "${required[@]}"; do
   [[ -e "$stage/$f" ]] || { echo "[FAIL] Candidate is missing required file: $f"; exit 1; }
 done
 
-for f in UPDATE.sh UPDATE-core.sh INSTALL.sh INSTALL-core.sh GITHUB-UPDATE.sh GITHUB-UPDATE-core.sh MIGRATE-TO-GITHUB.sh MIGRATE-TO-GITHUB-core.sh UNINSTALL.sh bin/ywd-hotspotctl bin/ywd-hotspotctl-core bin/ywd-ui.sh lab/mmdvm-diag.sh lib/oled_owner.sh; do
+for f in UPDATE.sh UPDATE-core.sh INSTALL.sh INSTALL-core.sh GITHUB-UPDATE.sh GITHUB-UPDATE-core.sh MIGRATE-TO-GITHUB.sh MIGRATE-TO-GITHUB-core.sh UNINSTALL.sh bin/ywd-hotspotctl bin/ywd-hotspotctl-core bin/ywd-ui.sh lab/mmdvm-diag.sh lib/oled_owner.sh lib/admin_dispatch.sh; do
   [[ -f "$stage/$f" ]] && bash -n "$stage/$f"
 done
 python3 -m py_compile "$stage"/lib/*.py
+PYTHONPATH="$stage/lib" \
+YWD_PLUGIN_CATALOG="$stage/lib/plugin_packages" \
+YWD_PLUGIN_STATE="$stage/.plugin-state-does-not-exist" \
+YWD_PLUGIN_CONFIG_DIR="$stage/.plugin-config-does-not-exist" \
+python3 - <<'PY'
+import plugin_manager
+snapshot = plugin_manager.snapshot({"hostname":"candidate","uptime_s":1,"temperature_c":25,"load":[0,0,0]})
+assert snapshot["api"] == 1
+rows = [p for p in snapshot["plugins"] if p.get("id") == "system-info"]
+assert len(rows) == 1 and rows[0].get("valid") is True, rows
+assert snapshot["system"].get("enabled") is False
+PY
 
 echo "Candidate validation: OK"
 if [[ "$MODE" == "dry-run" ]]; then
