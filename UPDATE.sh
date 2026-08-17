@@ -9,8 +9,8 @@ if declare -F ywd_banner >/dev/null; then
   ywd_info "MMDVM-Host / DMRGateway are not recompiled by normal app updates."
 fi
 
-# Nested console/update helpers are installed after the core updater returns, so
-# validate them here before any live service/config work begins.
+# Nested console/update/display helpers are installed after the core updater
+# returns, so validate them before any live service/config work begins.
 if [[ -d "$SELF/lib/console" ]]; then
   python3 -m py_compile "$SELF/lib/console/ywd-system-info.py"
   for f in ywd-info-wrapper.sh ywd-logs.sh ywd-env.sh ywd-prompt.sh ywd-motd.sh; do
@@ -18,11 +18,12 @@ if [[ -d "$SELF/lib/console" ]]; then
   done
 fi
 for f in \
-  lib/update_runner.py lib/update_admin.py lib/dashboard_update.py \
+  lib/update_runner.py lib/update_admin.py lib/dashboard_update.py lib/oled.py lib/oled_owner.sh \
   web/update.js web/update.css systemd/ywd-update.service; do
   [[ -f "$SELF/$f" ]] || { echo "[FAIL] Update source missing $f" >&2; exit 1; }
 done
-python3 -m py_compile "$SELF/lib/update_runner.py" "$SELF/lib/update_admin.py" "$SELF/lib/dashboard_update.py"
+python3 -m py_compile "$SELF/lib/update_runner.py" "$SELF/lib/update_admin.py" "$SELF/lib/dashboard_update.py" "$SELF/lib/oled.py"
+bash -n "$SELF/lib/oled_owner.sh"
 [[ -f "$SELF/lib/system_branding.sh" ]] && bash -n "$SELF/lib/system_branding.sh"
 
 CORE="$SELF/UPDATE-core.sh"
@@ -58,4 +59,11 @@ fi
 # helper records the host's previous issue/MOTD state so uninstall can restore it.
 if [[ -f "$SELF/lib/system_branding.sh" ]]; then
   sudo bash "$SELF/lib/system_branding.sh" install "$SELF"
+fi
+
+# YWD-Hotspot OS already owns the physical display with ywd-headless-oled.
+# Point that one daemon at the unified renderer and keep ywd-oled disabled.
+# Generic installs continue using the normal app OLED unit.
+if [[ -f "$SELF/lib/oled_owner.sh" ]]; then
+  sudo bash "$SELF/lib/oled_owner.sh" install "$SELF"
 fi
