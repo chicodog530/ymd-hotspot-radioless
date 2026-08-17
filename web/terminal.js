@@ -66,6 +66,10 @@
 
   async function connectAudio() {
     try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Your browser is blocking microphone access because this dashboard is running on HTTP instead of HTTPS. \n\nTo fix this in Chrome/Edge, go to: chrome://flags/#unsafely-treat-insecure-origin-as-secure \nEnable the flag and add: http://" + window.location.host);
+      }
+
       const constraints = {
         audio: {
           deviceId: dom.micSelect.value !== 'default' ? { exact: dom.micSelect.value } : undefined,
