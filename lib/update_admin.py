@@ -18,6 +18,7 @@ import admin as core_admin
 
 CFG = Path("/etc/ywd-hotspot/config.json")
 APPLIED_STATE = Path("/var/lib/ywd-hotspot/applied-state.json")
+UPDATE_STATUS = Path("/var/lib/ywd-hotspot/update-status.json")
 RUNNER = Path("/usr/local/libexec/ywd-update-runner")
 SERVICE = "ywd-update.service"
 
@@ -67,6 +68,26 @@ def runner_check():
     return out
 
 
+def mark_queued(check):
+    doc = {
+        "state": "running",
+        "phase": "queued",
+        "installed_version": check.get("installed_version"),
+        "current_commit": check.get("current_commit"),
+        "target_version": check.get("target_version"),
+        "target_commit": check.get("target_commit"),
+        "target_date": check.get("target_date"),
+        "channel": check.get("channel"),
+        "available": True,
+        "up_to_date": False,
+        "validated": True,
+        "started_at": core_admin.now_iso(),
+        "updated_at": core_admin.now_iso(),
+        "error": None,
+    }
+    core_admin.atomic_json(UPDATE_STATUS, doc, mode=0o640, group=True)
+
+
 def update_check():
     if service_active():
         raise ValueError("an update is already running")
@@ -85,8 +106,14 @@ def update_start():
     check = runner_check()
     if check.get("up_to_date") or not check.get("available"):
         return {"ok": True, "started": False, "up_to_date": True, **check}
+    mark_queued(check)
     p = run(["systemctl", "start", "--no-block", SERVICE], 10)
     if p.returncode != 0:
+        core_admin.atomic_json(UPDATE_STATUS, {
+            **read_status(), "state": "failed", "phase": "start-failed",
+            "error": (p.stderr or p.stdout or "could not start update service").strip()[:800],
+            "updated_at": core_admin.now_iso(), "completed_at": core_admin.now_iso(),
+        }, mode=0o640, group=True)
         raise RuntimeError((p.stderr or p.stdout or "could not start update service").strip()[:800])
     core_admin.audit("software-update-start", {
         "channel": check.get("channel"),
@@ -94,6 +121,14 @@ def update_start():
         "target_version": check.get("target_version"),
     })
     return {"ok": True, "started": True, **check}
+
+
+def read_status():
+    try:
+        d = json.loads(UPDATE_STATUS.read_text())
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
 
 
 def set_hotspot_password(data):
