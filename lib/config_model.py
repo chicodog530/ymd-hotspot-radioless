@@ -9,7 +9,7 @@ import json
 import re
 from pathlib import Path
 
-SCHEMA = 3
+SCHEMA = 4
 CALL_RE = re.compile(r"^[A-Z0-9]{3,10}(?:-[A-Z0-9]{1,2})?$")
 HOST_RE = re.compile(r"^[A-Za-z0-9.-]+$")
 
@@ -58,6 +58,46 @@ def defaults() -> dict:
             "address": "0x3c",
             "brightness": 127,
             "idle_timeout_s": 0,
+            "rotation": 0,
+            "runtime_mode": "basic",
+            "large_callsign": True,
+            "callsign_size": "auto",
+            "show_talkgroup": True,
+            "talkgroup_format": "number",
+            "show_slot": True,
+            "show_elapsed": True,
+            "show_ber": True,
+            "show_rssi": True,
+            "show_loss": True,
+            "post_call_hold_s": 3,
+            "idle_cycle": False,
+            "idle_cycle_s": 6,
+            "instrumentation": {
+                "enabled": False,
+                "preset": "basic",
+                "signal_meter": True,
+                "signal_style": "segmented",
+                "signal_segments": 14,
+                "rssi_min_dbm": -120,
+                "rssi_max_dbm": -40,
+                "peak_hold": True,
+                "peak_hold_ms": 1500,
+                "quality_meter": True,
+                "ber_excellent": 1.0,
+                "ber_good": 2.0,
+                "ber_fair": 5.0,
+                "tx_meter": True,
+                "history_rssi": True,
+                "history_ber": True,
+                "history_seconds": 30,
+                "render_fps": 10,
+                "animation": "normal",
+                "idle_animation": True,
+                "live_status_strip": True,
+                "show_numeric_values": True,
+                "meter_labels": "full",
+                "reduced_motion": "system",
+            },
         },
         "web": {
             "bind": "0.0.0.0",
@@ -103,6 +143,13 @@ def _float(v, name, lo, hi):
     return n
 
 
+def _choice(v, name, allowed):
+    s = str(v if v is not None else "").strip().lower()
+    if s not in allowed:
+        raise ValueError(f"{name} must be one of: {', '.join(sorted(allowed))}")
+    return s
+
+
 def _text(v, name, maxlen=160, allow_empty=True):
     s = str(v if v is not None else "").replace("\r", " ").replace("\n", " ").strip()
     if not allow_empty and not s:
@@ -113,7 +160,7 @@ def _text(v, name, maxlen=160, allow_empty=True):
 
 
 def normalize(raw: dict, preserve_password: str | None = None) -> dict:
-    """Migrate old schemas, fill defaults, validate, and return canonical schema 3."""
+    """Migrate old schemas, fill defaults, validate, and return canonical schema 4."""
     if not isinstance(raw, dict):
         raise ValueError("configuration must be a JSON object")
     c = deep_merge(defaults(), raw)
@@ -170,8 +217,8 @@ def normalize(raw: dict, preserve_password: str | None = None) -> dict:
     pw = str(pw)
     if any(ch in pw for ch in ('"', "\n", "\r")):
         raise ValueError("Hotspot Security password contains an unsupported character")
-    if len(pw) > 128:
-        raise ValueError("Hotspot Security password is too long")
+    if len(pw) > 20:
+        raise ValueError("BrandMeister Hotspot Security password must be 20 characters or fewer")
     bm["password"] = pw
 
     d = c["display"]
@@ -187,6 +234,54 @@ def normalize(raw: dict, preserve_password: str | None = None) -> dict:
     d["address"] = hex(addr)
     d["brightness"] = _int(d.get("brightness", 127), "OLED brightness", 1, 255)
     d["idle_timeout_s"] = _int(d.get("idle_timeout_s", 0), "OLED idle timeout", 0, 86400)
+    d["rotation"] = _int(d.get("rotation", 0), "OLED rotation", 0, 180)
+    if d["rotation"] not in {0, 180}:
+        raise ValueError("OLED rotation must be 0 or 180 degrees")
+    d["runtime_mode"] = _choice(d.get("runtime_mode", "basic"), "OLED runtime mode", {"basic", "enhanced", "minimal"})
+    d["large_callsign"] = bool(d.get("large_callsign", True))
+    d["callsign_size"] = _choice(d.get("callsign_size", "auto"), "OLED callsign size", {"auto", "normal", "large", "huge"})
+    d["show_talkgroup"] = bool(d.get("show_talkgroup", True))
+    d["talkgroup_format"] = _choice(d.get("talkgroup_format", "number"), "OLED talkgroup format", {"number", "name", "name_number"})
+    d["show_slot"] = bool(d.get("show_slot", True))
+    d["show_elapsed"] = bool(d.get("show_elapsed", True))
+    d["show_ber"] = bool(d.get("show_ber", True))
+    d["show_rssi"] = bool(d.get("show_rssi", True))
+    d["show_loss"] = bool(d.get("show_loss", True))
+    d["post_call_hold_s"] = _int(d.get("post_call_hold_s", 3), "OLED post-call hold", 0, 30)
+    d["idle_cycle"] = bool(d.get("idle_cycle", False))
+    d["idle_cycle_s"] = _int(d.get("idle_cycle_s", 6), "OLED idle page interval", 2, 60)
+
+    ins = d.get("instrumentation")
+    if not isinstance(ins, dict):
+        raise ValueError("display instrumentation must be an object")
+    ins["enabled"] = bool(ins.get("enabled", False))
+    ins["preset"] = _choice(ins.get("preset", "basic"), "instrumentation preset", {"basic", "balanced", "instrument", "maximum", "custom"})
+    ins["signal_meter"] = bool(ins.get("signal_meter", True))
+    ins["signal_style"] = _choice(ins.get("signal_style", "segmented"), "signal meter style", {"segmented", "smooth"})
+    ins["signal_segments"] = _int(ins.get("signal_segments", 14), "signal meter segments", 6, 24)
+    ins["rssi_min_dbm"] = _int(ins.get("rssi_min_dbm", -120), "RSSI minimum", -160, -20)
+    ins["rssi_max_dbm"] = _int(ins.get("rssi_max_dbm", -40), "RSSI maximum", -150, 0)
+    if ins["rssi_min_dbm"] >= ins["rssi_max_dbm"]:
+        raise ValueError("RSSI minimum must be lower than RSSI maximum")
+    ins["peak_hold"] = bool(ins.get("peak_hold", True))
+    ins["peak_hold_ms"] = _int(ins.get("peak_hold_ms", 1500), "signal peak hold", 0, 10000)
+    ins["quality_meter"] = bool(ins.get("quality_meter", True))
+    ins["ber_excellent"] = _float(ins.get("ber_excellent", 1.0), "BER excellent threshold", 0.0, 20.0)
+    ins["ber_good"] = _float(ins.get("ber_good", 2.0), "BER good threshold", 0.0, 30.0)
+    ins["ber_fair"] = _float(ins.get("ber_fair", 5.0), "BER fair threshold", 0.0, 50.0)
+    if not ins["ber_excellent"] <= ins["ber_good"] <= ins["ber_fair"]:
+        raise ValueError("BER thresholds must be ordered excellent <= good <= fair")
+    ins["tx_meter"] = bool(ins.get("tx_meter", True))
+    ins["history_rssi"] = bool(ins.get("history_rssi", True))
+    ins["history_ber"] = bool(ins.get("history_ber", True))
+    ins["history_seconds"] = _int(ins.get("history_seconds", 30), "instrument history", 10, 180)
+    ins["render_fps"] = _int(ins.get("render_fps", 10), "instrument render rate", 5, 20)
+    ins["animation"] = _choice(ins.get("animation", "normal"), "instrument animation", {"off", "subtle", "normal", "high"})
+    ins["idle_animation"] = bool(ins.get("idle_animation", True))
+    ins["live_status_strip"] = bool(ins.get("live_status_strip", True))
+    ins["show_numeric_values"] = bool(ins.get("show_numeric_values", True))
+    ins["meter_labels"] = _choice(ins.get("meter_labels", "full"), "meter labels", {"compact", "full"})
+    ins["reduced_motion"] = _choice(ins.get("reduced_motion", "system"), "reduced motion mode", {"system", "reduce", "full"})
 
     w = c["web"]
     w["bind"] = _text(w.get("bind", "0.0.0.0"), "dashboard bind", 64, False)
@@ -208,7 +303,12 @@ def normalize(raw: dict, preserve_password: str | None = None) -> dict:
     template = defaults()
     out = {"schema": SCHEMA}
     for sec in ("station", "radio", "brandmeister", "display", "web", "maintenance"):
-        out[sec] = {k: c[sec][k] for k in template[sec]}
+        out[sec] = {}
+        for key, default in template[sec].items():
+            if isinstance(default, dict):
+                out[sec][key] = {sub: c[sec][key][sub] for sub in default}
+            else:
+                out[sec][key] = c[sec][key]
     return out
 
 
@@ -249,8 +349,8 @@ def classify_changes(paths):
     """Return service/apply hints for changed config paths."""
     p = set(paths)
     rf = any(x.startswith(("station.", "radio.", "brandmeister.")) for x in p)
-    oled = any(x.startswith("display.") for x in p)
-    dashboard = any(x.startswith("web.") for x in p)
+    oled = any(x.startswith("display.") and not x.startswith("display.instrumentation.") for x in p)
+    dashboard = any(x.startswith("web.") or x.startswith("display.instrumentation.") for x in p)
     journald = any(x in {"maintenance.persistent_journal", "maintenance.journal_max_mb"} for x in p)
     autostart = "maintenance.rf_autostart" in p
     return {
