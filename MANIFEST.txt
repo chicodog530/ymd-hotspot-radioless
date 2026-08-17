@@ -61,6 +61,7 @@ lib/oled_owner.sh
 lib/plugin_admin.py
 lib/plugin_manager.py
 lib/plugin_service_manager.py
+lib/plugin_update_safety.py
 lib/plugin_packages/system-info/config.schema.json
 lib/plugin_packages/system-info/plugin.json
 lib/service_plugin_packages/service-heartbeat/config.schema.json
