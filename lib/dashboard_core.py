@@ -337,7 +337,7 @@ class H(BaseHTTPRequestHandler):
     def log_message(self,fmt,*args): pass
     def security_headers(self):
         self.send_header("X-Content-Type-Options","nosniff"); self.send_header("X-Frame-Options","DENY"); self.send_header("Referrer-Policy","no-referrer")
-        self.send_header("Content-Security-Policy","default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'")
+        self.send_header("Content-Security-Policy","default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws: wss:; img-src 'self' data:; frame-ancestors 'none'")
     def send_bytes(self,status,data,ctype="application/json",extra_headers=None,cache="no-store"):
         self.send_response(status); self.send_header("Content-Type",ctype); self.send_header("Cache-Control",cache); self.security_headers()
         if extra_headers:
