@@ -49,7 +49,9 @@ class AudioBridge:
             config.read("/etc/ywd-hotspot/MMDVM-Host.ini")
             self.callsign = config.get("General", "Callsign", fallback="NOCALL")
             self.dmr_id = int(config.get("General", "Id", fallback="0"))
-            logging.info(f"Loaded config: Callsign={self.callsign}, ID={self.dmr_id}")
+            self.freq = int(config.get("Modem", "RXFrequency", fallback="433000000"))
+            self.cc = int(config.get("DMR", "ColorCode", fallback="1"))
+            logging.info(f"Loaded config: Callsign={self.callsign}, ID={self.dmr_id}, Freq={self.freq}, CC={self.cc}")
         except Exception as e:
             logging.error(f"Could not load MMDVM-Host.ini, using defaults: {e}")
             
@@ -99,8 +101,14 @@ class AudioBridge:
         # Login to local DMRGateway (simulating MMDVMHost)
         # MMDVM protocol login is ~280 bytes. Callsign is space-padded.
         callsign_bytes = self.callsign.encode('ascii').ljust(8, b' ')
-        login_pkt = b"DMRD" + struct.pack("!I", self.dmr_id) + callsign_bytes
-        login_pkt = login_pkt.ljust(280, b'\x00')
+        login_pkt = bytearray(280)
+        login_pkt[0:4] = b"DMRD"
+        login_pkt[4:8] = struct.pack("!I", self.dmr_id)
+        login_pkt[8:16] = callsign_bytes
+        login_pkt[16:20] = struct.pack("!I", getattr(self, "freq", 433000000))
+        login_pkt[20:24] = struct.pack("!I", getattr(self, "freq", 433000000))
+        login_pkt[24] = 1
+        login_pkt[25] = getattr(self, "cc", 1)
         logging.info(f"Connecting to DMRGateway at {host}:{port}...")
         sock.sendto(login_pkt, (host, port))
         
