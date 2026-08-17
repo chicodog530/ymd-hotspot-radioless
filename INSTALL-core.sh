@@ -55,8 +55,11 @@ PY
 echo; echo "Installing build/runtime dependencies..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y --no-install-recommends build-essential git ca-certificates libmosquitto-dev libmosquitto1 nlohmann-json3-dev python3 python3-smbus i2c-tools iw sudo
+apt-get install -y --no-install-recommends build-essential git ca-certificates libmosquitto-dev libmosquitto1 nlohmann-json3-dev python3 python3-pip python3-smbus i2c-tools iw sudo openjdk-11-jre-headless
 [[ -r /usr/include/nlohmann/json.hpp ]] || { echo "[FAIL] nlohmann/json.hpp missing."; exit 1; }
+
+echo; echo "Installing python dependencies for audio bridge..."
+pip3 install jpype1 websockets
 
 if ! id ywd-hotspot >/dev/null 2>&1; then useradd --system --home /var/lib/ywd-hotspot --create-home --shell /usr/sbin/nologin ywd-hotspot; fi
 for g in dialout i2c systemd-journal; do getent group "$g" >/dev/null 2>&1 && usermod -a -G "$g" ywd-hotspot || true; done
