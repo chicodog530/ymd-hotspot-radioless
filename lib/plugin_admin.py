@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Narrow privileged state/config helper for YWD-Hotspot Plugin API v1."""
+"""Narrow privileged state/config/lifecycle helper for YWD-Hotspot plugins."""
 from __future__ import annotations
 
 import grp
@@ -14,6 +14,7 @@ if str(APP_LIB) not in sys.path:
     sys.path.insert(0, str(APP_LIB))
 
 import plugin_manager
+import plugin_service_manager
 
 
 def payload():
@@ -54,19 +55,36 @@ def atomic_json(path, data, mode=0o640):
     os.replace(tmp, path)
 
 
-def run(args, timeout=20):
+def run(args, timeout=25):
     return subprocess.run(args, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                           timeout=timeout, check=False)
 
 
-def stop_plugin_service(plugin):
+def run_systemctl(*args, timeout=25):
+    p = run(["systemctl", *args], timeout=timeout)
+    if p.returncode != 0:
+        raise RuntimeError((p.stdout or f"systemctl {' '.join(args)} failed").strip()[-700:])
+    return (p.stdout or "").strip()
+
+
+def all_entries():
+    return list(plugin_manager.discover()) + list(plugin_service_manager.discover())
+
+
+def resolve_plugin(ident):
+    ident = str(ident or "")
+    try:
+        return plugin_manager.get_plugin(ident), "declarative"
+    except plugin_manager.PluginError:
+        return plugin_service_manager.get_plugin(ident), "service"
+
+
+def stop_plugin_service(plugin, disable=True):
     service = plugin.get("service")
     if not service:
-        return None
-    p = run(["systemctl", "disable", "--now", service])
-    if p.returncode != 0:
-        return (p.stdout or f"failed to stop {service}").strip()[-500:]
-    return None
+        return
+    action = ["disable", "--now", service] if disable else ["stop", service]
+    run_systemctl(*action)
 
 
 def set_system(data):
@@ -77,26 +95,22 @@ def set_system(data):
     disabled_plugins = []
 
     if not enabled:
-        # Stop/unload every valid plugin before the master state is committed.
-        # API v1 has no service-backed plugins yet, but this transaction order is
-        # the contract later plugin APIs must preserve.
-        errors = []
-        for entry in plugin_manager.discover():
+        # Stop/unload every valid service before committing master OFF. If any
+        # service refuses to stop, fail the whole operation rather than claim a
+        # false-safe disabled state.
+        for entry in all_entries():
             if not entry.get("valid"):
                 continue
             manifest = entry["manifest"]
             ident = manifest.get("id")
-            if bool((state.get("plugins", {}).get(ident) or {}).get("enabled", False)):
+            desired = bool((state.get("plugins", {}).get(ident) or {}).get("enabled", False))
+            if desired:
                 disabled_plugins.append(ident)
-            error = stop_plugin_service(manifest)
-            if error:
-                errors.append(error)
-        if errors:
-            raise RuntimeError("could not safely stop all plugin services: " + "; ".join(errors)[:600])
+            if manifest.get("service"):
+                stop_plugin_service(manifest, disable=True)
 
-        # Master OFF means fully disabled, not "armed". Keep configuration files,
-        # but clear every per-plugin activation flag so re-enabling the subsystem
-        # cannot silently reactivate anything.
+        # Master OFF means fully disabled. Configuration files remain, but no
+        # activation flag survives to auto-start later.
         for ident in list(state.setdefault("plugins", {})):
             state["plugins"][ident] = {"enabled": False}
 
@@ -110,31 +124,60 @@ def set_plugin(data):
     enabled = data.get("enabled")
     if not isinstance(enabled, bool):
         raise ValueError("enabled must be true or false")
-    plugin = plugin_manager.get_plugin(ident)
+    plugin, kind = resolve_plugin(ident)
     state = plugin_manager.read_state()
     if enabled and not state.get("enabled"):
         raise ValueError("enable the plugin subsystem first")
-    if enabled and plugin.get("service"):
-        raise ValueError("service-backed plugins are not permitted by Plugin API v1")
-    warning = None
-    if not enabled:
-        warning = stop_plugin_service(plugin)
-        if warning:
-            raise RuntimeError(warning)
+
+    if kind == "service":
+        if enabled:
+            run_systemctl("enable", "--now", plugin["service"])
+        else:
+            stop_plugin_service(plugin, disable=True)
+
     state.setdefault("plugins", {})[ident] = {"enabled": enabled}
     atomic_json(plugin_manager.STATE, state)
-    return {"ok": True, "id": ident, "enabled": enabled}
+    return {"ok": True, "id": ident, "enabled": enabled, "service": plugin.get("service")}
 
 
 def save_config(data):
     ident = str(data.get("id") or "")
-    plugin = plugin_manager.get_plugin(ident)
+    plugin, kind = resolve_plugin(ident)
     config = data.get("config")
     if not isinstance(config, dict):
         raise ValueError("config must be an object")
     clean = plugin_manager.normalize_config(plugin, config)
     atomic_json(plugin_manager.config_path(ident), clean)
-    return {"ok": True, "id": ident, "config": plugin_manager.public_config(plugin, clean)}
+    restart_required = False
+    if kind == "service":
+        restart_required = plugin_service_manager.runtime_state(plugin["service"]).get("state") == "active"
+    return {
+        "ok": True,
+        "id": ident,
+        "config": plugin_manager.public_config(plugin, clean),
+        "restart_required": restart_required,
+    }
+
+
+def runtime_action(data):
+    ident = str(data.get("id") or "")
+    action = str(data.get("action") or "")
+    if action not in {"start", "stop", "restart"}:
+        raise ValueError("runtime action must be start, stop, or restart")
+    plugin = plugin_service_manager.get_plugin(ident)
+    state = plugin_manager.read_state()
+    if not state.get("enabled"):
+        raise ValueError("plugin subsystem is disabled")
+    if not bool((state.get("plugins", {}).get(ident) or {}).get("enabled", False)):
+        raise ValueError("enable the service plugin first")
+    run_systemctl(action, plugin["service"])
+    return {
+        "ok": True,
+        "id": ident,
+        "action": action,
+        "service": plugin["service"],
+        "runtime": plugin_service_manager.runtime_state(plugin["service"]),
+    }
 
 
 def main():
@@ -150,6 +193,8 @@ def main():
         out = set_plugin(data)
     elif action == "plugin-config-save":
         out = save_config(data)
+    elif action == "plugin-runtime":
+        out = runtime_action(data)
     else:
         raise ValueError("unsupported plugin admin action")
     print(json.dumps(out, separators=(",", ":")))
