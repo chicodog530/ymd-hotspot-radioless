@@ -2,6 +2,7 @@
 """Narrow privileged state/config/lifecycle helper for YWD-Hotspot plugins."""
 from __future__ import annotations
 
+import fcntl
 import grp
 import json
 import os
@@ -10,6 +11,7 @@ import sys
 from pathlib import Path
 
 APP_LIB = Path("/opt/ywd-hotspot/app/lib")
+UPDATE_LOCK = Path("/run/ywd-hotspot-update.lock")
 if str(APP_LIB) not in sys.path:
     sys.path.insert(0, str(APP_LIB))
 
@@ -28,6 +30,21 @@ def payload():
     if not isinstance(data, dict):
         raise ValueError("payload must be an object")
     return data
+
+
+def ensure_update_not_running():
+    """Refuse plugin mutations while the GitHub/application updater owns state."""
+    UPDATE_LOCK.parent.mkdir(parents=True, exist_ok=True)
+    with UPDATE_LOCK.open("a+") as handle:
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise ValueError("YWD-Hotspot update is in progress; plugin controls are temporarily locked")
+        finally:
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            except Exception:
+                pass
 
 
 def ywd_gid():
@@ -185,6 +202,7 @@ def main():
         raise SystemExit("ywd-hotspot plugin admin must run as root")
     if len(sys.argv) != 2:
         raise SystemExit("usage: plugin_admin.py ACTION")
+    ensure_update_not_running()
     action = sys.argv[1]
     data = payload()
     if action == "plugin-system-set":
