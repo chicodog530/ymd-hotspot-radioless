@@ -18,6 +18,6 @@
   loadStyle('/ui-polish.css?v=alpha12.2');
   loadStyle('/update.css?v=alpha12.1');
   loadStyle('/instrumentation.css?v=alpha12.1');
-  loadStyle('/plugin-manager.css?v=alpha14');
-  load('/app-core.js', () => load('/talkgroups.js?v=alpha12.1', () => load('/ui-polish.js?v=alpha12.2', () => load('/update.js?v=alpha12.3', () => load('/update-progress.js?v=alpha12.1', () => load('/instrumentation.js?v=alpha12.1', () => load('/instrumentation-bootstrap.js?v=alpha12.1', () => load('/plugin-manager.js?v=alpha14', () => load('/plugin-config-actions.js?v=alpha15.1')))))))));
+  loadStyle('/plugin-manager.css?v=alpha16');
+  load('/app-core.js', () => load('/talkgroups.js?v=alpha12.1', () => load('/ui-polish.js?v=alpha12.2', () => load('/update.js?v=alpha12.3', () => load('/update-progress.js?v=alpha12.1', () => load('/instrumentation.js?v=alpha12.1', () => load('/instrumentation-bootstrap.js?v=alpha12.1', () => load('/plugin-manager-render.js?v=alpha16', () => load('/plugin-package-actions.js?v=alpha16', () => load('/plugin-manager.js?v=alpha16', () => load('/plugin-config-actions.js?v=alpha16')))))))))));
 })();

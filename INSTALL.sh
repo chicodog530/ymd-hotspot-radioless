@@ -18,12 +18,35 @@ if [[ -d "$SELF/lib/console" ]]; then
 fi
 for f in \
   lib/update_runner.py lib/update_admin.py lib/oled.py lib/oled_owner.sh \
+  lib/plugin_manifest.py lib/plugin_manager.py lib/plugin_package_manager.py lib/plugin_service_manager.py lib/plugin_admin_common.py lib/plugin_admin_state.py lib/plugin_admin_packages.py lib/plugin_admin.py lib/dashboard_plugins.py \
+  lib/plugin_packages/system-info/plugin.json lib/plugin_packages/system-info/config.schema.json \
+  lib/service_plugin_packages/service-heartbeat/plugin.json lib/service_plugin_packages/service-heartbeat/config.schema.json lib/service_plugin_packages/service-heartbeat/service.py \
+  web/plugin-manager-render.js web/plugin-package-actions.js web/plugin-manager.js web/plugin-manager.css web/plugin-config-actions.js systemd/ywd-plugin@.service \
   web/instrumentation.js web/instrumentation-bootstrap.js web/instrumentation.css; do
   [[ -f "$SELF/$f" ]] || { echo "[FAIL] Install source missing $f" >&2; exit 1; }
 done
-python3 -m py_compile "$SELF/lib/update_runner.py" "$SELF/lib/update_admin.py" "$SELF/lib/oled.py"
+python3 -m py_compile \
+  "$SELF/lib/update_runner.py" "$SELF/lib/update_admin.py" "$SELF/lib/oled.py" \
+  "$SELF/lib/plugin_manifest.py" "$SELF/lib/plugin_manager.py" "$SELF/lib/plugin_package_manager.py" "$SELF/lib/plugin_service_manager.py" "$SELF/lib/plugin_admin_common.py" "$SELF/lib/plugin_admin_state.py" "$SELF/lib/plugin_admin_packages.py" "$SELF/lib/plugin_admin.py" "$SELF/lib/dashboard_plugins.py" \
+  "$SELF/lib/service_plugin_packages/service-heartbeat/service.py"
 [[ -f "$SELF/lib/system_branding.sh" ]] && bash -n "$SELF/lib/system_branding.sh"
 bash -n "$SELF/lib/oled_owner.sh"
+
+PYTHONPATH="$SELF/lib" \
+YWD_PLUGIN_CATALOG="$SELF/lib/plugin_packages" \
+YWD_SERVICE_PLUGIN_CATALOG="$SELF/lib/service_plugin_packages" \
+YWD_PLUGIN_STATE="$SELF/.plugin-state-does-not-exist" \
+YWD_PLUGIN_PACKAGE_STATE="$SELF/.plugin-package-state-does-not-exist" \
+YWD_PLUGIN_CONFIG_DIR="$SELF/.plugin-config-does-not-exist" \
+YWD_PLUGIN_DATA_DIR="$SELF/.plugin-data-does-not-exist" \
+python3 - <<'PY'
+import plugin_manager, plugin_service_manager
+base = plugin_manager.snapshot({"hostname":"candidate","uptime_s":1,"temperature_c":25,"load":[0,0,0]})
+assert base["system"]["enabled"] is False
+assert any(p.get("id") == "system-info" and p.get("valid") and p.get("installed") for p in base["plugins"])
+services = plugin_service_manager.snapshot()
+assert any(p.get("id") == "service-heartbeat" and p.get("valid") and p.get("installed") for p in services)
+PY
 
 CORE="$SELF/INSTALL-core.sh"
 [[ -f "$CORE" ]] || CORE="/opt/ywd-hotspot/repo/INSTALL-core.sh"

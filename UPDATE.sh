@@ -18,39 +18,47 @@ if [[ -d "$SELF/lib/console" ]]; then
   done
 fi
 for f in \
-  lib/update_runner.py lib/update_admin.py lib/dashboard_update.py lib/oled.py lib/oled_owner.sh \
-  lib/plugin_manager.py lib/plugin_service_manager.py lib/plugin_admin.py lib/dashboard_plugins.py lib/plugin_update_safety.py \
+  lib/update_runner.py lib/update_admin.py lib/oled.py lib/oled_owner.sh \
+  lib/plugin_manifest.py lib/plugin_manager.py lib/plugin_package_manager.py lib/plugin_service_manager.py lib/plugin_admin_common.py lib/plugin_admin_state.py lib/plugin_admin_packages.py lib/plugin_admin.py lib/dashboard_plugins.py lib/plugin_update_safety.py \
+  lib/plugin_packages/system-info/plugin.json \
+  lib/plugin_packages/system-info/config.schema.json \
   lib/service_plugin_packages/service-heartbeat/plugin.json \
   lib/service_plugin_packages/service-heartbeat/config.schema.json \
   lib/service_plugin_packages/service-heartbeat/service.py \
   web/update.js web/update.css web/update-progress.js \
   web/instrumentation.js web/instrumentation-bootstrap.js web/instrumentation.css \
-  web/plugin-manager.js web/plugin-manager.css \
+  web/plugin-manager-render.js web/plugin-package-actions.js web/plugin-manager.js web/plugin-manager.css web/plugin-config-actions.js \
   systemd/ywd-update.service systemd/ywd-plugin@.service; do
   [[ -f "$SELF/$f" ]] || { echo "[FAIL] Update source missing $f" >&2; exit 1; }
 done
 python3 -m py_compile \
   "$SELF/lib/update_runner.py" "$SELF/lib/update_admin.py" "$SELF/lib/dashboard_update.py" "$SELF/lib/oled.py" \
-  "$SELF/lib/plugin_manager.py" "$SELF/lib/plugin_service_manager.py" "$SELF/lib/plugin_admin.py" "$SELF/lib/dashboard_plugins.py" \
+  "$SELF/lib/plugin_manifest.py" "$SELF/lib/plugin_manager.py" "$SELF/lib/plugin_package_manager.py" "$SELF/lib/plugin_service_manager.py" "$SELF/lib/plugin_admin_common.py" "$SELF/lib/plugin_admin_state.py" "$SELF/lib/plugin_admin_packages.py" "$SELF/lib/plugin_admin.py" "$SELF/lib/dashboard_plugins.py" \
   "$SELF/lib/plugin_update_safety.py" "$SELF/lib/service_plugin_packages/service-heartbeat/service.py"
 bash -n "$SELF/lib/oled_owner.sh"
 [[ -f "$SELF/lib/system_branding.sh" ]] && bash -n "$SELF/lib/system_branding.sh"
 
-# Validate both plugin catalogs with missing state/config paths. Missing state
-# must remain fail-closed and neither catalog is allowed to execute plugin code
-# during discovery.
+# Validate both plugin catalogs with isolated missing state/config/package paths.
+# Missing activation state remains fail-closed. Missing package state uses only
+# the explicit Alpha15 legacy-installed IDs so the Alpha16 update preserves the
+# two already-proven reference plugins but future new packages stay available,
+# not installed.
 PYTHONPATH="$SELF/lib" \
 YWD_PLUGIN_CATALOG="$SELF/lib/plugin_packages" \
 YWD_SERVICE_PLUGIN_CATALOG="$SELF/lib/service_plugin_packages" \
 YWD_PLUGIN_STATE="$SELF/.plugin-state-does-not-exist" \
+YWD_PLUGIN_PACKAGE_STATE="$SELF/.plugin-package-state-does-not-exist" \
 YWD_PLUGIN_CONFIG_DIR="$SELF/.plugin-config-does-not-exist" \
+YWD_PLUGIN_DATA_DIR="$SELF/.plugin-data-does-not-exist" \
 python3 - <<'PY'
 import plugin_manager, plugin_service_manager
 base = plugin_manager.snapshot({"hostname":"candidate","uptime_s":1,"temperature_c":25,"load":[0,0,0]})
 assert base["system"]["enabled"] is False
-assert any(p.get("id") == "system-info" and p.get("valid") for p in base["plugins"])
+system_info = [p for p in base["plugins"] if p.get("id") == "system-info"]
+assert len(system_info) == 1 and system_info[0].get("valid") and system_info[0].get("installed"), system_info
 services = plugin_service_manager.snapshot()
-assert any(p.get("id") == "service-heartbeat" and p.get("valid") for p in services), services
+heartbeat = [p for p in services if p.get("id") == "service-heartbeat"]
+assert len(heartbeat) == 1 and heartbeat[0].get("valid") and heartbeat[0].get("installed"), heartbeat
 assert all(not p.get("rf_mode") for p in services)
 PY
 
@@ -74,8 +82,8 @@ repair_live_admin_bridge(){
 }
 
 # Capture plugin intent + exact service boot/runtime state before replacing the
-# application. State/config files are not changed here; services are simply made
-# inert for the duration of the core update.
+# application. State/config/package files are not changed here; services are
+# simply made inert for the duration of the core update.
 PLUGIN_UPDATE_SNAPSHOT="$(mktemp /run/ywd-hotspot-plugin-update.XXXXXX.json)"
 cleanup_plugin_snapshot(){ sudo rm -f "$PLUGIN_UPDATE_SNAPSHOT" 2>/dev/null || true; }
 trap cleanup_plugin_snapshot EXIT

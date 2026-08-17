@@ -6,6 +6,7 @@ from urllib.parse import parse_qs, urlparse
 
 import dashboard_core as core
 import plugin_manager
+import plugin_package_manager
 import plugin_service_manager
 
 
@@ -15,12 +16,16 @@ def current_snapshot():
     plugins = list(base.get("plugins", [])) + service_rows
     system = dict(base.get("system", {}))
     enabled = bool(system.get("enabled", False))
+    package_state_error = system.get("package_state_error")
     system.update({
-        "installed": len(plugins),
+        "available": len(plugins),
+        "installed": sum(1 for p in plugins if p.get("installed")),
         "enabled_plugins": sum(1 for p in plugins if p.get("enabled")),
         "active_plugins": sum(1 for p in plugins if p.get("health") == "active"),
-        "health": "disabled" if not enabled else ("error" if any(p.get("health") == "error" for p in plugins) else "good"),
-        "execution_model": "declarative + sandboxed services",
+        "health": "disabled" if not enabled else (
+            "error" if package_state_error or any(p.get("health") == "error" for p in plugins) else "good"
+        ),
+        "execution_model": "package lifecycle + declarative + sandboxed services",
         "service_api": plugin_service_manager.API_VERSION,
     })
     return {"api": base.get("api", 1), "system": system, "plugins": plugins}
@@ -34,12 +39,42 @@ def test_plugin(ident):
     return plugin_manager.test_plugin(ident, core.brief_health(force=True))
 
 
+def available_plugin(ident):
+    try:
+        return plugin_manager.get_available_plugin(ident)
+    except plugin_manager.PluginError as declarative_error:
+        try:
+            return plugin_service_manager.get_available_plugin(ident)
+        except plugin_manager.PluginError:
+            raise declarative_error
+
+
+def check_plugin(ident, kind="all"):
+    if kind not in {"all", "dependencies", "hardware"}:
+        raise ValueError("check kind must be dependencies, hardware, or all")
+    plugin = available_plugin(ident)
+    checks = plugin_package_manager.check_requirements(plugin)
+    result = {
+        "ok": checks["ok"] if kind == "all" else checks[kind]["ok"],
+        "id": plugin["id"],
+        "name": plugin["name"],
+        "kind": kind,
+    }
+    if kind == "all":
+        result["requirements"] = checks
+    else:
+        result[kind] = checks[kind]
+    return result
+
+
 def wrap_handler(base):
     class PluginHandler(base):
         def do_GET(self):
             parsed = urlparse(self.path)
             path = parsed.path
             static = {
+                "/plugin-manager-render.js": ("plugin-manager-render.js", "application/javascript; charset=utf-8"),
+                "/plugin-package-actions.js": ("plugin-package-actions.js", "application/javascript; charset=utf-8"),
                 "/plugin-manager.js": ("plugin-manager.js", "application/javascript; charset=utf-8"),
                 "/plugin-config-actions.js": ("plugin-config-actions.js", "application/javascript; charset=utf-8"),
                 "/plugin-manager.css": ("plugin-manager.css", "text/css; charset=utf-8"),
@@ -77,8 +112,12 @@ def wrap_handler(base):
                 "/api/plugins/enable": "plugin-set",
                 "/api/plugins/config": "plugin-config-save",
                 "/api/plugins/runtime": "plugin-runtime",
+                "/api/plugins/install": "plugin-package-install",
+                "/api/plugins/uninstall": "plugin-package-uninstall",
+                "/api/plugins/data-remove": "plugin-data-remove",
             }
-            if path not in set(routes) | {"/api/plugins/test"}:
+            local_routes = {"/api/plugins/test", "/api/plugins/check"}
+            if path not in set(routes) | local_routes:
                 super().do_POST()
                 return
             if not self.require_control():
@@ -87,6 +126,8 @@ def wrap_handler(base):
                 body = self.body_json()
                 if path == "/api/plugins/test":
                     out = test_plugin(body.get("id"))
+                elif path == "/api/plugins/check":
+                    out = check_plugin(body.get("id"), str(body.get("kind") or "all"))
                 else:
                     out = core.admin_call(routes[path], body, 40)
                 self.send_json({**out, "plugins_state": current_snapshot()})

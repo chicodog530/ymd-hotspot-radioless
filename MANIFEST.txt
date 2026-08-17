@@ -59,7 +59,12 @@ lib/migrate.py
 lib/oled.py
 lib/oled_owner.sh
 lib/plugin_admin.py
+lib/plugin_admin_common.py
+lib/plugin_admin_packages.py
+lib/plugin_admin_state.py
 lib/plugin_manager.py
+lib/plugin_manifest.py
+lib/plugin_package_manager.py
 lib/plugin_service_manager.py
 lib/plugin_update_safety.py
 lib/plugin_packages/system-info/config.schema.json
@@ -94,6 +99,8 @@ web/instrumentation.css
 web/instrumentation.js
 web/plugin-config-actions.js
 web/plugin-manager.css
+web/plugin-manager-render.js
+web/plugin-package-actions.js
 web/plugin-manager.js
 web/style.css
 web/talkgroups.js

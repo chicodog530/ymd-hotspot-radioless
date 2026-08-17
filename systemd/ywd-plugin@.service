@@ -7,6 +7,7 @@ ConditionPathExists=/opt/ywd-hotspot/app/lib/service_plugin_packages/%i/service.
 Type=simple
 User=ywd-hotspot
 Group=ywd-hotspot
+ExecCondition=/usr/bin/python3 /opt/ywd-hotspot/app/lib/plugin_package_manager.py require-installed %i
 ExecStart=/usr/bin/python3 /opt/ywd-hotspot/app/lib/service_plugin_packages/%i/service.py
 Restart=on-failure
 RestartSec=5

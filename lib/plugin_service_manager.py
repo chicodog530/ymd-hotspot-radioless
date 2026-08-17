@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Sandboxed service-plugin discovery/status for YWD-Hotspot.
 
-This module is trusted core. Service plugins may execute only through the single
-hardened ywd-plugin@.service template and may not supply their own unit files.
-RF/device/network access is intentionally unavailable in this phase.
+Service plugins execute only through the single hardened ywd-plugin@.service
+template. Alpha16 also requires package registration before lifecycle operations
+are accepted; bundled source alone is not an installed plugin.
 """
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ import subprocess
 from pathlib import Path
 
 import plugin_manager
+import plugin_package_manager
 
 API_VERSION = 1
 LIB = Path(__file__).resolve().parent
@@ -23,7 +24,7 @@ ALLOWED_KINDS = {"service"}
 ALLOWED_CAPABILITIES = {"service:lifecycle", "read:journal"}
 MANIFEST_KEYS = {
     "api", "id", "name", "version", "description", "trust", "kind",
-    "capabilities", "rf_mode", "entrypoint", "config_schema",
+    "capabilities", "rf_mode", "entrypoint", "config_schema", "dependencies", "hardware",
 }
 ENTRY_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,79}\.py$")
 
@@ -87,6 +88,12 @@ def validate_manifest(path):
     if not isinstance(caps, list) or any(str(x) not in ALLOWED_CAPABILITIES for x in caps):
         raise ServicePluginError("service manifest contains an unsupported capability")
     caps = list(dict.fromkeys(str(x) for x in caps))
+    try:
+        dependencies, hardware = plugin_package_manager.validate_requirements(
+            raw.get("dependencies", []), raw.get("hardware", [])
+        )
+    except plugin_package_manager.PackageStateError as exc:
+        raise ServicePluginError(str(exc))
     entrypoint = str(raw.get("entrypoint") or "")
     if not ENTRY_RE.fullmatch(entrypoint) or Path(entrypoint).name != entrypoint:
         raise ServicePluginError("service entrypoint must be a simple .py filename")
@@ -107,6 +114,8 @@ def validate_manifest(path):
         "rf_mode": False,
         "service": unit_name(ident),
         "entrypoint": entrypoint,
+        "dependencies": dependencies,
+        "hardware": hardware,
         "config_schema": schema_name,
         "schema": schema,
         "directory": directory,
@@ -133,7 +142,7 @@ def discover():
     return rows
 
 
-def get_plugin(ident):
+def get_available_plugin(ident):
     ident = str(ident or "")
     if not plugin_manager.ID_RE.fullmatch(ident):
         raise ServicePluginError("invalid service plugin id")
@@ -142,7 +151,14 @@ def get_plugin(ident):
             if not entry.get("valid"):
                 raise ServicePluginError(entry.get("error") or "service plugin is invalid")
             return entry["manifest"]
-    raise ServicePluginError("service plugin is not installed")
+    raise ServicePluginError("service plugin package is not available")
+
+
+def get_plugin(ident):
+    plugin = get_available_plugin(ident)
+    if not plugin_package_manager.is_installed(plugin["id"]):
+        raise ServicePluginError("service plugin is not installed")
+    return plugin
 
 
 def _run(args, timeout=4):
@@ -174,27 +190,39 @@ def snapshot():
     for entry in discover():
         manifest = entry["manifest"]
         ident = manifest.get("id", "invalid-package")
-        desired = bool((state.get("plugins", {}).get(ident) or {}).get("enabled", False))
-        effective = bool(state.get("enabled") and desired and entry.get("valid"))
+        installed = bool(entry.get("valid") and plugin_package_manager.is_installed(ident))
+        desired = bool(installed and (state.get("plugins", {}).get(ident) or {}).get("enabled", False))
+        effective = bool(installed and state.get("enabled") and desired and entry.get("valid"))
         item = {
             "id": ident,
             "name": manifest.get("name", ident),
             "version": manifest.get("version", "unknown"),
+            "available": True,
+            "installed": installed,
             "valid": bool(entry.get("valid")),
             "error": entry.get("error"),
             "enabled": desired,
             "effective_enabled": effective,
-            "health": "error" if not entry.get("valid") else "disabled",
+            "config_present": plugin_manager.config_path(ident).is_file() if plugin_manager.ID_RE.fullmatch(str(ident)) else False,
+            "data_present": plugin_package_manager.data_path(ident).exists() if plugin_manager.ID_RE.fullmatch(str(ident)) else False,
+            "health": "error" if not entry.get("valid") else ("available" if not installed else "disabled"),
         }
         if entry.get("valid"):
             runtime = runtime_state(manifest["service"])
-            try:
-                config = normalize_config(manifest)
-                config_error = None
-            except Exception as exc:
-                config = normalize_config(manifest, {})
-                config_error = str(exc)[:400]
-            if effective:
+            checks = plugin_package_manager.check_requirements(manifest)
+            orphaned = not installed and (runtime["state"] == "active" or runtime["boot"] != "disabled")
+            if orphaned:
+                item["health"] = "error"
+                item["error"] = "uninstalled service still has runtime/boot state; disable or repair it before continuing"
+            config_error = None
+            config = None
+            if installed:
+                try:
+                    config = normalize_config(manifest)
+                except Exception as exc:
+                    config = normalize_config(manifest, {})
+                    config_error = str(exc)[:400]
+            if installed and effective:
                 item["health"] = "active" if runtime["state"] == "active" else "stopped"
             if config_error:
                 item["health"] = "error"
@@ -206,11 +234,15 @@ def snapshot():
                 "capabilities": manifest["capabilities"],
                 "rf_mode": False,
                 "service": manifest["service"],
+                "dependencies": manifest["dependencies"],
+                "hardware": manifest["hardware"],
+                "requirements": checks,
                 "schema": manifest["schema"],
-                "config": public_config(manifest, config),
                 "config_error": config_error,
                 "runtime": runtime,
             })
+            if config is not None:
+                item["config"] = public_config(manifest, config)
         packages.append(item)
     return packages
 

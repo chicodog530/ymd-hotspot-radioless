@@ -2,7 +2,7 @@
   "api": 1,
   "id": "system-info",
   "name": "System Info Test",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Harmless reference plugin used to prove the YWD-Hotspot plugin framework without touching RF, systemd, networking, OLED, or sudo.",
   "trust": "first-party",
   "kind": "declarative",
@@ -10,6 +10,10 @@
   "capabilities": [
     "read:system-summary"
   ],
+  "dependencies": [
+    "python3"
+  ],
+  "hardware": [],
   "rf_mode": false,
   "service": null,
   "config_schema": "config.schema.json"
