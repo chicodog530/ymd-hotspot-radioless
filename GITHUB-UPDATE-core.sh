@@ -144,8 +144,12 @@ if [[ -z "$TAG" && "$BRANCH" == "dev-plugins" ]]; then
   plugin_target=1
   required+=(
     lib/dashboard_plugins.py lib/plugin_admin.py lib/admin_dispatch.sh lib/plugin_manager.py
+    lib/plugin_service_manager.py lib/plugin_update_safety.py
     lib/plugin_packages/system-info/plugin.json lib/plugin_packages/system-info/config.schema.json
-    web/plugin-manager.js web/plugin-manager.css
+    lib/service_plugin_packages/service-heartbeat/plugin.json
+    lib/service_plugin_packages/service-heartbeat/config.schema.json
+    lib/service_plugin_packages/service-heartbeat/service.py
+    web/plugin-manager.js web/plugin-manager.css systemd/ywd-plugin@.service
   )
 fi
 for f in "${required[@]}"; do
@@ -159,18 +163,27 @@ if (( plugin_target )); then
   bash -n "$stage/lib/admin_dispatch.sh"
 fi
 python3 -m py_compile "$stage"/lib/*.py
+
+plugin_runtime_target=0
+if [[ -f "$stage/lib/plugin_update_safety.py" && -f "$stage/lib/plugin_service_manager.py" && -f "$stage/systemd/ywd-plugin@.service" ]]; then
+  plugin_runtime_target=1
+fi
 if (( plugin_target )); then
+  (( plugin_runtime_target )) || { echo "[FAIL] dev-plugins candidate lacks service/update safety runtime"; exit 1; }
   PYTHONPATH="$stage/lib" \
   YWD_PLUGIN_CATALOG="$stage/lib/plugin_packages" \
+  YWD_SERVICE_PLUGIN_CATALOG="$stage/lib/service_plugin_packages" \
   YWD_PLUGIN_STATE="$stage/.plugin-state-does-not-exist" \
   YWD_PLUGIN_CONFIG_DIR="$stage/.plugin-config-does-not-exist" \
   python3 - <<'PY'
-import plugin_manager
+import plugin_manager, plugin_service_manager
 snapshot = plugin_manager.snapshot({"hostname":"candidate","uptime_s":1,"temperature_c":25,"load":[0,0,0]})
 assert snapshot["api"] == 1
 rows = [p for p in snapshot["plugins"] if p.get("id") == "system-info"]
 assert len(rows) == 1 and rows[0].get("valid") is True, rows
 assert snapshot["system"].get("enabled") is False
+services = plugin_service_manager.discover()
+assert any(e.get("valid") and e.get("manifest",{}).get("id") == "service-heartbeat" for e in services), services
 PY
 fi
 
@@ -184,9 +197,25 @@ echo
 read -r -p "Apply $target_version from $label @ $target_short? [y/N]: " answer
 [[ "$answer" =~ ^[Yy]$ ]] || { echo "Cancelled."; exit 0; }
 
+# When leaving a plugin-aware runtime for a target that has no plugin runtime,
+# the currently installed updater owns the transition. The stable target stays
+# blissfully plugin-unaware while plugin services are stopped before handoff.
+transition_helper=""
+transition_snapshot=""
+if (( ! plugin_runtime_target )) && [[ -f /opt/ywd-hotspot/app/lib/plugin_update_safety.py ]]; then
+  transition_helper="$stage/.ywd-plugin-update-safety.py"
+  transition_snapshot="$stage/.ywd-plugin-transition.json"
+  cp /opt/ywd-hotspot/app/lib/plugin_update_safety.py "$transition_helper"
+  chmod 0700 "$transition_helper"
+  python3 "$transition_helper" capture --snapshot "$transition_snapshot" --lib /opt/ywd-hotspot/app/lib >/dev/null
+  python3 "$transition_helper" quiesce --snapshot "$transition_snapshot" --lib /opt/ywd-hotspot/app/lib >/dev/null
+  echo "Plugin services quiesced before leaving the plugin runtime."
+fi
+
 echo "Applying validated candidate. UPDATE.sh will preserve the current RF/service policy..."
 next_channel="$channel_display"
 [[ -z "$TAG" ]] && next_channel="$BRANCH"
+set +e
 YWD_SOURCE_TYPE=github \
 YWD_SOURCE_STATE=clean \
 YWD_GIT_BRANCH="$label" \
@@ -194,6 +223,22 @@ YWD_GIT_COMMIT="$target_sha" \
 YWD_GIT_COMMIT_DATE="$target_date" \
 YWD_UPDATE_CHANNEL="$next_channel" \
   bash "$stage/UPDATE.sh"
+update_rc=$?
+set -e
+
+if (( update_rc != 0 )); then
+  if [[ -n "$transition_helper" && -f "$transition_snapshot" ]]; then
+    echo "Restoring plugin runtime after target rollback..."
+    python3 "$transition_helper" restore --snapshot "$transition_snapshot" --lib /opt/ywd-hotspot/app/lib || \
+      echo "[WARN] Plugin runtime restore needs manual review."
+  fi
+  exit "$update_rc"
+fi
+
+if [[ -n "$transition_helper" && -f "$transition_snapshot" ]]; then
+  echo "Finalizing transition to plugin-free target..."
+  python3 "$transition_helper" stable-cleanup --snapshot "$transition_snapshot" --lib /opt/ywd-hotspot/app/lib
+fi
 
 if [[ -n "$TAG" ]]; then
   git -C "$REPO_DIR" checkout --quiet --detach "$target_sha"
