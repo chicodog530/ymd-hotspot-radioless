@@ -152,8 +152,8 @@ class AudioBridge:
             
     async def serve(self, host="0.0.0.0", port=8081):
         self.start_jvm()
-        # Connect to DMRGateway locally on 62032
-        bm_task = asyncio.create_task(self.brandmeister_client("127.0.0.1", 62032))
+        # Connect to DMRGateway locally on 62031
+        bm_task = asyncio.create_task(self.brandmeister_client("127.0.0.1", 62031))
         
         logging.info(f"Audio Bridge WebSocket listening on ws://{host}:{port}")
         async with websockets.serve(self.handle_client, host, port):
