@@ -19,14 +19,40 @@ if [[ -d "$SELF/lib/console" ]]; then
 fi
 for f in \
   lib/update_runner.py lib/update_admin.py lib/dashboard_update.py lib/oled.py lib/oled_owner.sh \
+  lib/plugin_manager.py lib/plugin_service_manager.py lib/plugin_admin.py lib/dashboard_plugins.py \
+  lib/service_plugin_packages/service-heartbeat/plugin.json \
+  lib/service_plugin_packages/service-heartbeat/config.schema.json \
+  lib/service_plugin_packages/service-heartbeat/service.py \
   web/update.js web/update.css web/update-progress.js \
   web/instrumentation.js web/instrumentation-bootstrap.js web/instrumentation.css \
-  systemd/ywd-update.service; do
+  web/plugin-manager.js web/plugin-manager.css \
+  systemd/ywd-update.service systemd/ywd-plugin@.service; do
   [[ -f "$SELF/$f" ]] || { echo "[FAIL] Update source missing $f" >&2; exit 1; }
 done
-python3 -m py_compile "$SELF/lib/update_runner.py" "$SELF/lib/update_admin.py" "$SELF/lib/dashboard_update.py" "$SELF/lib/oled.py"
+python3 -m py_compile \
+  "$SELF/lib/update_runner.py" "$SELF/lib/update_admin.py" "$SELF/lib/dashboard_update.py" "$SELF/lib/oled.py" \
+  "$SELF/lib/plugin_manager.py" "$SELF/lib/plugin_service_manager.py" "$SELF/lib/plugin_admin.py" "$SELF/lib/dashboard_plugins.py" \
+  "$SELF/lib/service_plugin_packages/service-heartbeat/service.py"
 bash -n "$SELF/lib/oled_owner.sh"
 [[ -f "$SELF/lib/system_branding.sh" ]] && bash -n "$SELF/lib/system_branding.sh"
+
+# Validate both plugin catalogs with missing state/config paths. Missing state
+# must remain fail-closed and neither catalog is allowed to execute plugin code
+# during discovery.
+PYTHONPATH="$SELF/lib" \
+YWD_PLUGIN_CATALOG="$SELF/lib/plugin_packages" \
+YWD_SERVICE_PLUGIN_CATALOG="$SELF/lib/service_plugin_packages" \
+YWD_PLUGIN_STATE="$SELF/.plugin-state-does-not-exist" \
+YWD_PLUGIN_CONFIG_DIR="$SELF/.plugin-config-does-not-exist" \
+python3 - <<'PY'
+import plugin_manager, plugin_service_manager
+base = plugin_manager.snapshot({"hostname":"candidate","uptime_s":1,"temperature_c":25,"load":[0,0,0]})
+assert base["system"]["enabled"] is False
+assert any(p.get("id") == "system-info" and p.get("valid") for p in base["plugins"])
+services = plugin_service_manager.snapshot()
+assert any(p.get("id") == "service-heartbeat" and p.get("valid") for p in services), services
+assert all(not p.get("rf_mode") for p in services)
+PY
 
 CORE="$SELF/UPDATE-core.sh"
 [[ -f "$CORE" ]] || CORE="/opt/ywd-hotspot/repo/UPDATE-core.sh"
