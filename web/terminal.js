@@ -2,15 +2,11 @@
   const dom = {
     connectBtn: document.getElementById('termConnectBtn'),
     disconnectBtn: document.getElementById('termDisconnectBtn'),
-    pttBtn: document.getElementById('termPttBtn'),
-    micSelect: document.getElementById('termMicSelect'),
     speakerSelect: document.getElementById('termSpeakerSelect'),
     volume: document.getElementById('termVolume'),
     mute: document.getElementById('termSpeakerMute'),
-    micGain: document.getElementById('termMicGain'),
     tgInput: document.getElementById('termTgInput'),
     connStatus: document.getElementById('termConnStatus'),
-    pttStatus: document.getElementById('termPttStatus'),
     signalViz: document.getElementById('termSignalViz'),
     activityBadge: document.getElementById('termActivityBadge'),
     activityWho: document.getElementById('termActivityWho'),
@@ -62,7 +58,6 @@
         dom.connStatus.textContent = "CONNECTED";
         dom.connectBtn.hidden = true;
         dom.disconnectBtn.hidden = false;
-        dom.pttBtn.disabled = false;
         sendControlState();
       };
 
@@ -131,8 +126,6 @@
     dom.connStatus.textContent = "DISCONNECTED";
     dom.connectBtn.hidden = false;
     dom.disconnectBtn.hidden = true;
-    dom.pttBtn.disabled = true;
-    updatePttUI();
 
     if (ws) {
       ws.close();
@@ -148,40 +141,14 @@
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({
         type: "control",
-        tg: dom.tgInput.value,
-        ptt: isTransmitting
+        tg: dom.tgInput.value
       }));
-    }
-  }
-
-  function updatePttUI() {
-    if (isTransmitting) {
-      dom.pttBtn.classList.add('danger');
-      dom.pttBtn.classList.remove('primary');
-      dom.pttBtn.textContent = "TRANSMITTING...";
-      dom.pttStatus.textContent = "TX";
-      dom.activityBadge.classList.remove('idle');
-      dom.activityBadge.classList.add('active', 'tx');
-      dom.signalViz.classList.remove('idle');
-      dom.signalViz.classList.add('active', 'tx');
-    } else {
-      dom.pttBtn.classList.remove('danger');
-      dom.pttBtn.classList.add('primary');
-      dom.pttBtn.textContent = "PUSH TO TALK";
-      dom.pttStatus.textContent = "IDLE";
-      dom.activityBadge.classList.add('idle');
-      dom.activityBadge.classList.remove('active', 'tx');
-      dom.signalViz.classList.add('idle');
-      dom.signalViz.classList.remove('active', 'tx');
     }
   }
 
   // Events
   dom.connectBtn.addEventListener('click', connectAudio);
   dom.disconnectBtn.addEventListener('click', disconnectAudio);
-  
-  // Remove PTT button logic
-  dom.pttBtn.addEventListener('click', () => { alert('PTT is disabled in Listen-Only mode.'); });
 
   // Init
   populateDevices();

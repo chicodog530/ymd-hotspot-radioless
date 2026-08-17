@@ -19,14 +19,10 @@
     <article class="card hero live-card">
       <div class="card-title title-row"><span>WEB TERMINAL</span><span class="live-legend" id="termConnStatus">DISCONNECTED</span></div>
       <div id="termSignalViz" class="signal-viz idle" aria-hidden="true"><span class="signal-wave wave-a"></span><span class="signal-wave wave-b"></span><span class="signal-wave wave-c"></span><span class="radio-core"><span class="antenna"></span></span></div>
-      <div id="termActivityBadge" class="activity idle"><span class="bigdot"></span><span id="termPttStatus">IDLE</span></div>
+      <div id="termActivityBadge" class="activity idle"><span class="bigdot"></span><span id="termPttStatus">RX ONLY</span></div>
       <div class="who" id="termActivityWho">Waiting for traffic</div>
       <div class="dest" id="termActivityDest"></div>
       <div class="metrics" id="termActivityMetrics"></div>
-      
-      <div class="buttonrow wrap" style="margin-top: 1rem;">
-        <button class="btn primary ctl" id="termPttBtn" disabled style="width:100%; height:80px; font-size:1.5rem; font-weight:bold;">PUSH TO TALK</button>
-      </div>
     </article>
     <article class="card">
       <div class="card-title">TERMINAL CONTROLS</div>
@@ -34,10 +30,6 @@
         <div class="field">
           <label>CURRENT TALKGROUP</label>
           <input id="termTgInput" inputmode="numeric" placeholder="e.g. 3100" value="9990">
-        </div>
-        <div class="field">
-          <label>MICROPHONE INPUT</label>
-          <select id="termMicSelect"><option value="default">Default Microphone</option></select>
         </div>
         <div class="field">
           <label>SPEAKER OUTPUT</label>
@@ -49,10 +41,6 @@
         </div>
         <div class="field check">
           <label><input id="termSpeakerMute" type="checkbox"> MUTE SPEAKER</label>
-        </div>
-        <div class="field">
-          <label>MICROPHONE GAIN</label>
-          <input id="termMicGain" type="range" min="1" max="300" value="100">
         </div>
       </div>
       <div class="buttonrow wrap" style="margin-top: 1rem;">
