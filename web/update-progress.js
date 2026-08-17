@@ -3,6 +3,8 @@
   let pollTimer = null;
   let armedAt = 0;
   let lastProgress = 0;
+  let armedBuild = null;
+  let reloadScheduled = false;
 
   const el = id => document.getElementById(id);
   const safeText = v => String(v ?? '');
@@ -11,6 +13,42 @@
     const r = await fetch('/api/update/status', {cache:'no-store', credentials:'same-origin'});
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     return r.json();
+  }
+
+  function pageBuild() {
+    try {
+      const current = (typeof state !== 'undefined' && state) ? state : {};
+      const build = current?.build || {};
+      return {
+        version: safeText(build.version || current.version || '').trim(),
+        commit: safeText(build.commit || '').trim(),
+      };
+    } catch (_) {
+      return {version:'', commit:''};
+    }
+  }
+
+  function completedBuild(u) {
+    return {
+      version: safeText(u.installed_version || u.target_version || '').trim(),
+      commit: safeText(u.current_commit || u.target_commit || '').trim(),
+    };
+  }
+
+  function buildChanged(u) {
+    const before = armedBuild || {};
+    const after = completedBuild(u);
+    if (before.commit && after.commit && after.commit !== 'unknown') return before.commit !== after.commit;
+    if (before.version && after.version && after.version !== 'unknown') return before.version !== after.version;
+    return false;
+  }
+
+  function scheduleFreshDashboard(u) {
+    if (reloadScheduled || u.phase === 'up-to-date' || !buildChanged(u)) return false;
+    reloadScheduled = true;
+    if (el('updateProgressMessage')) el('updateProgressMessage').textContent = 'Update complete. Loading the new dashboard assets…';
+    setTimeout(() => location.reload(), 900);
+    return true;
   }
 
   function ensureModal() {
@@ -88,7 +126,7 @@
     modal.classList.add('on');
     modal.classList.remove('failed','complete','reconnecting');
 
-    const state = safeText(u.state || 'running');
+    const stateName = safeText(u.state || 'running');
     const phase = safeText(u.phase || 'working');
     const message = safeText(u.message || 'Software update is running…');
     const badge = el('updateProgressState');
@@ -96,7 +134,7 @@
     const close = el('closeUpdateProgress');
     const reload = el('reloadUpdateProgress');
 
-    setProgress(u.progress ?? (state === 'complete' ? 100 : lastProgress));
+    setProgress(u.progress ?? (stateName === 'complete' ? 100 : lastProgress));
     el('updateProgressPhase').textContent = phase.replace(/[-_]/g,' ').toUpperCase();
     el('updateProgressMessage').textContent = message;
     el('updateProgressTarget').textContent = targetText(u);
@@ -104,19 +142,20 @@
     reload.hidden = true;
     spinner.hidden = false;
 
-    if (state === 'complete') {
+    if (stateName === 'complete') {
       modal.classList.add('complete');
       badge.textContent = u.phase === 'up-to-date' ? 'UP TO DATE' : 'COMPLETE';
       badge.className = 'badge good';
       spinner.hidden = true;
       setProgress(100);
       el('updateProgressPhase').textContent = u.phase === 'up-to-date' ? 'ALREADY CURRENT' : 'UPDATE COMPLETE';
-      reload.hidden = u.phase === 'up-to-date';
-      close.hidden = false;
+      const autoReload = scheduleFreshDashboard(u);
+      reload.hidden = autoReload || u.phase === 'up-to-date';
+      close.hidden = autoReload;
       stopPolling();
       return;
     }
-    if (state === 'failed') {
+    if (stateName === 'failed') {
       modal.classList.add('failed');
       badge.textContent = 'FAILED';
       badge.className = 'badge bad';
@@ -166,6 +205,8 @@
   }
 
   function armForNewUpdate() {
+    armedBuild = pageBuild();
+    reloadScheduled = false;
     armedAt = Date.now();
     lastProgress = 0;
     startPolling();
