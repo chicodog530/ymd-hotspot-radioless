@@ -109,6 +109,7 @@ class AudioBridge:
         login_pkt[20:24] = struct.pack("!I", getattr(self, "freq", 433000000))
         login_pkt[24] = 1
         login_pkt[25] = getattr(self, "cc", 1)
+        login_pkt = login_pkt.ljust(352, b'\x00')
         logging.info(f"Connecting to DMRGateway at {host}:{port}...")
         sock.sendto(login_pkt, (host, port))
         
