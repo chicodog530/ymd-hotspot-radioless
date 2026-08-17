@@ -1,6 +1,6 @@
 # 🔄 Upgrading YWD-Hotspot
 
-[← Docs index](README.md) · [Installation](INSTALL.md) · [Project README](../README.md) · [Security](../SECURITY.md)
+[← Docs index](README.md) · [Installation](INSTALL.md) · [Display](DISPLAY.md) · [Project README](../README.md) · [Security](../SECURITY.md)
 
 ---
 
@@ -58,13 +58,44 @@ Channel file:
 /etc/ywd-hotspot/update-channel
 ```
 
+## 🌐 About-page updater
+
+On GitHub-managed installs, the About page exposes software-update controls when WebUI controls are unlocked.
+
+The browser can:
+
+1. check the saved `main`/`dev` channel
+2. show current and candidate version/commit
+3. refuse installation when canonical config has saved-but-not-applied changes
+4. request an update through the narrow authenticated admin action
+5. display stage-driven update progress
+6. reconnect after the dashboard restarts
+
+The browser does **not** pass arbitrary branch names, URLs, filesystem paths, or shell commands to root.
+
+The actual install runs as the detached one-shot service:
+
+```text
+ywd-update.service
+```
+
+The browser polls a sanitized local update-status endpoint. If the dashboard restarts during installation, the detached service continues independently.
+
 ## 🔎 Check for an update
+
+CLI:
 
 ```bash
 sudo ywd-hotspotctl update --check
 ```
 
-This fetches Git metadata and compares the installed build to the selected channel/ref. It does not stop/restart services.
+WebUI:
+
+```text
+ABOUT → SOFTWARE UPDATE → CHECK FOR UPDATE
+```
+
+Checking fetches Git metadata and validates the selected channel/ref without stopping RF services.
 
 ## 🧪 Validate without applying
 
@@ -77,9 +108,9 @@ A dry run:
 1. fetches the canonical repository
 2. resolves the selected branch/tag
 3. stages the candidate outside the live app
-4. checks required runtime files
-5. runs `bash -n` on shell entry points
-6. runs Python compile checks
+4. checks required runtime files, including display/update assets
+5. runs `bash -n` on shell entry points and helper scripts
+6. runs Python compile checks across `lib/*.py`
 7. exits without replacing `/opt/ywd-hotspot/app`
 
 RF/service state is unchanged.
@@ -92,7 +123,9 @@ Follow the saved channel:
 sudo ywd-hotspotctl update
 ```
 
-Explicit branch:
+Or use the authenticated About-page **INSTALL UPDATE** action.
+
+Explicit CLI branch:
 
 ```bash
 sudo ywd-hotspotctl update --branch main
@@ -105,7 +138,21 @@ Specific tag:
 sudo ywd-hotspotctl update --tag v0.1.0-alpha6
 ```
 
-The updater asks for explicit confirmation before it applies a candidate.
+The CLI updater asks for explicit confirmation before it applies a candidate. The WebUI uses its themed confirmation dialog before starting the detached update job.
+
+## 📊 Update progress
+
+The detached runner publishes sanitized stage/progress state under:
+
+```text
+/var/lib/ywd-hotspot/update-status.json
+```
+
+The WebUI progress modal advances only when real updater milestones are observed. The OLED may also display this status when its runtime configuration allows it.
+
+Typical stages include candidate checking/validation, protected backup, runtime install, service-policy restoration, service verification, managed-source finalization, and completion.
+
+Progress is intentionally coarse and stage-based; it is not a fake elapsed-time estimate.
 
 ## 🛡️ What the updater protects
 
@@ -134,6 +181,17 @@ The updater asks for explicit confirmation before it applies a candidate.
 - preserves RF autostart policy
 - restarts only services that need to come back
 - restores the exact RF enabled/disabled boot policy
+- preserves YWD-Hotspot OS OLED ownership when present
+
+## 📟 OLED ownership during updates
+
+YWD-Hotspot OS keeps `ywd-headless-oled.service` as the sole SSD1306/I2C owner.
+
+Updates install a systemd drop-in that points that existing service at the unified renderer. `ywd-oled.service` remains disabled on YWD-Hotspot OS. Display-related config apply/revert paths serialize the transition so the two units are never intentionally active against the display simultaneously.
+
+Uninstall removes the drop-in and restores the image's original headless OLED command.
+
+Generic/non-OS installations continue using `ywd-oled.service` normally.
 
 ## 📡 RF behavior
 
@@ -182,7 +240,7 @@ See **[INSTALL.md](INSTALL.md)** for the full migration/install flow.
 Before the live runtime is replaced, YWD-Hotspot creates a directory similar to:
 
 ```text
-/var/backups/ywd-hotspot/pre-0.1.0-alpha10-dev-YYYYMMDD-HHMMSS/
+/var/backups/ywd-hotspot/pre-VERSION-YYYYMMDD-HHMMSS/
 ```
 
 It contains protected archives of the previous config and deployed application.
@@ -191,6 +249,13 @@ It contains protected archives of the previous config and deployed application.
 > Configuration backups can contain reusable credentials. Keep them private.
 
 If runtime application fails during `UPDATE.sh`, the updater attempts to restore the previous application/configuration and service policy automatically.
+
+If a WebUI update fails, inspect:
+
+```bash
+sudo cat /var/lib/ywd-hotspot/update-status.json
+sudo journalctl -u ywd-update.service -n 150 --no-pager
+```
 
 ### Dirty managed checkout
 
@@ -203,6 +268,10 @@ git -C /opt/ywd-hotspot/repo status --short
 Do not `git reset --hard` blindly. Investigate unexpected modifications first.
 
 The managed checkout is source state, not a place for appliance configuration. Runtime config belongs under `/etc/ywd-hotspot`.
+
+### Legacy single-branch checkout
+
+Some early YWD-Hotspot OS images cloned only `dev-os`, which restricted the managed Git fetch refspec. Current update tooling widens the managed checkout to fetch canonical branches before resolving the saved `main`/`dev` channel.
 
 ### Alpha6 executable-bit migration hotfix
 
@@ -218,15 +287,6 @@ sudo git -C /opt/ywd-hotspot/repo status --short
 ```
 
 The second command should print nothing if the problem is only executable-bit drift. If it still lists modifications, inspect them before proceeding.
-
-Then rerun the migration from the clone you used:
-
-```bash
-cd ~/tmp/ywd-hotspot
-sudo ./MIGRATE-TO-GITHUB.sh
-```
-
-No RF-stack rebuild is required.
 
 ## 🧭 Build/source information
 
@@ -260,4 +320,4 @@ Do not move `pins.env` during unrelated UI/docs work merely because newer upstre
 
 ---
 
-**Next:** [🚀 Installation](INSTALL.md) · [📚 Docs index](README.md)
+**Next:** [📟 Display + Instrumentation](DISPLAY.md) · [🚀 Installation](INSTALL.md) · [📚 Docs index](README.md)
