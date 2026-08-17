@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Narrow privileged bridge for authenticated WebUI software updates/security."""
+"""Narrow privileged bridge for authenticated WebUI updates and OS ownership."""
 from __future__ import annotations
 
 import json
@@ -21,6 +21,8 @@ APPLIED_STATE = Path("/var/lib/ywd-hotspot/applied-state.json")
 UPDATE_STATUS = Path("/var/lib/ywd-hotspot/update-status.json")
 RUNNER = Path("/usr/local/libexec/ywd-update-runner")
 SERVICE = "ywd-update.service"
+HEADLESS_OLED = "ywd-headless-oled.service"
+APP_OLED = "ywd-oled.service"
 
 
 def run(args, timeout=30):
@@ -50,8 +52,12 @@ def pending_config():
         return True
 
 
-def service_active():
-    return run(["systemctl", "is-active", "--quiet", SERVICE], 5).returncode == 0
+def service_active(name=SERVICE):
+    return run(["systemctl", "is-active", "--quiet", name], 5).returncode == 0
+
+
+def unit_exists(name):
+    return run(["systemctl", "cat", name], 5).returncode == 0
 
 
 def runner_check():
@@ -70,20 +76,15 @@ def runner_check():
 
 def mark_queued(check):
     doc = {
-        "state": "running",
-        "phase": "queued",
+        "state": "running", "phase": "queued", "progress": 3,
+        "message": "Starting detached software update",
         "installed_version": check.get("installed_version"),
         "current_commit": check.get("current_commit"),
         "target_version": check.get("target_version"),
         "target_commit": check.get("target_commit"),
-        "target_date": check.get("target_date"),
-        "channel": check.get("channel"),
-        "available": True,
-        "up_to_date": False,
-        "validated": True,
-        "started_at": core_admin.now_iso(),
-        "updated_at": core_admin.now_iso(),
-        "error": None,
+        "target_date": check.get("target_date"), "channel": check.get("channel"),
+        "available": True, "up_to_date": False, "validated": True,
+        "started_at": core_admin.now_iso(), "updated_at": core_admin.now_iso(), "error": None,
     }
     core_admin.atomic_json(UPDATE_STATUS, doc, mode=0o640, group=True)
 
@@ -110,14 +111,13 @@ def update_start():
     p = run(["systemctl", "start", "--no-block", SERVICE], 10)
     if p.returncode != 0:
         core_admin.atomic_json(UPDATE_STATUS, {
-            **read_status(), "state": "failed", "phase": "start-failed",
+            **read_status(), "state": "failed", "phase": "start-failed", "progress": 0,
             "error": (p.stderr or p.stdout or "could not start update service").strip()[:800],
             "updated_at": core_admin.now_iso(), "completed_at": core_admin.now_iso(),
         }, mode=0o640, group=True)
         raise RuntimeError((p.stderr or p.stdout or "could not start update service").strip()[:800])
     core_admin.audit("software-update-start", {
-        "channel": check.get("channel"),
-        "target_commit": check.get("target_commit"),
+        "channel": check.get("channel"), "target_commit": check.get("target_commit"),
         "target_version": check.get("target_version"),
     })
     return {"ok": True, "started": True, **check}
@@ -142,20 +142,74 @@ def set_hotspot_password(data):
     return core_admin.set_hotspot_password(data)
 
 
+def headless_owner():
+    return unit_exists(HEADLESS_OLED)
+
+
+def switch_back_to_headless():
+    # Never let both services own /dev/i2c-* at once.  The headless OS service
+    # remains running even when display.enabled=false; the renderer simply powers
+    # the panel off while continuing to own the device safely.
+    run(["systemctl", "disable", "--now", APP_OLED], 12)
+    p = run(["systemctl", "restart", HEADLESS_OLED], 15)
+    if p.returncode != 0:
+        raise RuntimeError((p.stderr or p.stdout or "could not restore authoritative OLED service").strip()[:800])
+
+
+def with_headless_transition(fn):
+    if not headless_owner():
+        return fn()
+    run(["systemctl", "stop", HEADLESS_OLED], 12)
+    try:
+        return fn()
+    finally:
+        switch_back_to_headless()
+
+
+def config_apply(data):
+    if not headless_owner():
+        return core_admin.config_apply(data)
+    current = core_admin.current()
+    applied = core_admin.load_applied() or current
+    hints = config_model.classify_changes(config_model.diff_paths(applied, current))
+    if hints.get("oled"):
+        return with_headless_transition(lambda: core_admin.config_apply(data))
+    return core_admin.config_apply(data)
+
+
+def config_revert(data):
+    if headless_owner() and bool(data.get("apply", False)):
+        # We do not know the restored display diff until the core has loaded the
+        # snapshot, so serialize ownership for the whole revert+apply transaction.
+        return with_headless_transition(lambda: core_admin.config_revert(data))
+    return core_admin.config_revert(data)
+
+
+def service_restart(data):
+    name = str(data.get("service", ""))
+    if name == "oled" and headless_owner():
+        p = run(["systemctl", "restart", HEADLESS_OLED], 15)
+        if p.returncode != 0:
+            raise RuntimeError((p.stderr or p.stdout or "OLED restart failed").strip()[:800])
+        core_admin.audit("service-restart", {"service": "oled", "owner": HEADLESS_OLED})
+        return {"ok": True, "service": HEADLESS_OLED}
+    return core_admin.service_action(data)
+
+
 def main():
     if os.geteuid() != 0:
         raise SystemExit("ywd-hotspot-update-admin must run as root")
     if len(sys.argv) != 2:
         raise SystemExit("usage: ywd-hotspot-update-admin ACTION")
     action = sys.argv[1]
-    if action == "update-check":
-        out = update_check()
-    elif action == "update-start":
-        out = update_start()
-    elif action == "set-hotspot-password":
-        out = set_hotspot_password(payload())
-    else:
-        raise ValueError("unsupported update admin action")
+    data = payload() if action in {"set-hotspot-password", "config-apply", "config-revert", "service-restart"} else {}
+    if action == "update-check": out = update_check()
+    elif action == "update-start": out = update_start()
+    elif action == "set-hotspot-password": out = set_hotspot_password(data)
+    elif action == "config-apply": out = config_apply(data)
+    elif action == "config-revert": out = config_revert(data)
+    elif action == "service-restart": out = service_restart(data)
+    else: raise ValueError("unsupported update admin action")
     print(json.dumps(out, separators=(",", ":")))
 
 
