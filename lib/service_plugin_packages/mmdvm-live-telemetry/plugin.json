@@ -1,0 +1,16 @@
+{
+  "api": 1,
+  "id": "mmdvm-live-telemetry",
+  "name": "MMDVM Live Telemetry",
+  "version": "0.1.0",
+  "description": "Passive live MMDVM telemetry using the trusted YWD loopback MQTT bridge. Shows structured DMR activity, RSSI and BER without giving the plugin RF, serial, or network ownership.",
+  "trust": "first-party",
+  "kind": "service",
+  "provider": "mmdvm-telemetry",
+  "entrypoint": "service.py",
+  "capabilities": ["service:lifecycle", "read:journal", "read:mmdvm-telemetry"],
+  "rf_mode": false,
+  "config_schema": "config.schema.json",
+  "dependencies": ["python3", "systemd", "journalctl", "mmdvm-host", "mosquitto-broker", "mosquitto-client"],
+  "hardware": ["mmdvm-serial"]
+}

@@ -56,6 +56,15 @@ Daemon=0
 MQTTLevel=0
 DisplayLevel=1
 
+[MQTT]
+Host=127.0.0.1
+Port=18883
+Auth=0
+Username=ywd
+Password=ywd
+Keepalive=60
+Name=ywd-mmdvm
+
 [CW Id]
 Enable=0
 Time=10
@@ -243,7 +252,6 @@ Enable=0
 
 
 def main():
-    # Production writes require root, but test output directories are allowed when explicitly overridden.
     if os.geteuid() != 0 and str(OUT).startswith("/etc/"):
         raise SystemExit("generate-config.py must run as root")
     raw = json.loads(CFG.read_text())

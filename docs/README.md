@@ -13,6 +13,7 @@
 | 🚀 Install a new hotspot | **[Installation](INSTALL.md)** |
 | 🧱 Build a complete YWD-Hotspot OS image | **[OS Development](OS-DEVELOPMENT.md)** |
 | 🧩 Understand the experimental plugin framework | **[Plugins](PLUGINS.md)** |
+| 📡 Understand the MMDVM live telemetry bus/plugin | **[MMDVM Telemetry](TELEMETRY.md)** |
 | 🔁 Move an older archive install to GitHub | **[Installation](INSTALL.md#-existing-install--github-management)** |
 | 🔄 Check/apply updates or switch `main` / `dev` / `dev-plugins` | **[Upgrading](UPGRADING.md)** |
 | 🛠️ Recover from an update/migration problem | **[Upgrading](UPGRADING.md#-recovery-and-rollback)** |
@@ -39,6 +40,7 @@ A few project rules show up everywhere because they are intentional design const
 - the original Raspberry Pi Zero W remains the performance budget.
 - the OS builder packages the application from the same repository commit; normal app updates do not require rebuilding an image.
 - the experimental plugin subsystem is globally disableable and must leave core DMR operation intact when disabled.
+- plugin telemetry remains observational; RF/modem ownership requires a separate explicit arbitration design.
 
 ## 🌿 Branch model
 

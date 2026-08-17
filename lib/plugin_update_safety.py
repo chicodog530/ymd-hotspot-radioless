@@ -19,6 +19,8 @@ from pathlib import Path
 
 STATE = Path(os.environ.get('YWD_PLUGIN_STATE', '/etc/ywd-hotspot/plugin-state.json'))
 UNIT_TEMPLATE = Path(os.environ.get('YWD_PLUGIN_UNIT_TEMPLATE', '/etc/systemd/system/ywd-plugin@.service'))
+TELEMETRY_UNITS = ('ywd-mmdvm-telemetry.service', 'ywd-mqtt.service')
+TELEMETRY_UNIT_PATHS = tuple(Path('/etc/systemd/system') / unit for unit in TELEMETRY_UNITS)
 ID_RE = re.compile(r'^[a-z0-9][a-z0-9-]{0,39}$')
 UNIT_RE = re.compile(r'^ywd-plugin@([a-z0-9][a-z0-9-]{0,39})\.service$')
 
@@ -253,6 +255,19 @@ def stable_cleanup(snapshot_path, current_lib):
         if ID_RE.fullmatch(str(ident)):
             flags[str(ident)] = False
     write_plugin_state(False, flags)
+
+    # Alpha17's trusted telemetry transport is plugin infrastructure, not part of
+    # the stable appliance. Stop and remove only YWD-owned units when handing off
+    # to a plugin-free target. Mosquitto packages are intentionally retained so a
+    # pre-existing/shared package installation is never removed behind the user.
+    for unit in TELEMETRY_UNITS:
+        run(['systemctl', 'disable', '--now', unit], timeout=25)
+    for path in TELEMETRY_UNIT_PATHS:
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+
     try:
         UNIT_TEMPLATE.unlink()
     except FileNotFoundError:

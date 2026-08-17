@@ -36,61 +36,37 @@
   }
 
   function packageRows(plugin) {
-    const deps = requirementState(plugin, 'dependencies');
-    const hardware = requirementState(plugin, 'hardware');
-    return `<div class="plugin-meta plugin-package-meta">
-      <div><span>Package</span><b>${plugin.installed ? 'INSTALLED' : 'AVAILABLE'}</b></div>
-      <div><span>Config</span><b>${plugin.config_present ? 'PRESENT' : 'NONE'}</b></div>
-      <div><span>Data</span><b>${plugin.data_present ? 'PRESENT' : 'NONE'}</b></div>
-      <div><span>Dependencies</span><b class="plugin-check-${deps.cls}">${deps.text}</b></div>
-      <div><span>Hardware</span><b class="plugin-check-${hardware.cls}">${hardware.text}</b></div>
-    </div>`;
+    const deps = requirementState(plugin, 'dependencies'); const hardware = requirementState(plugin, 'hardware');
+    return `<div class="plugin-meta plugin-package-meta"><div><span>Package</span><b>${plugin.installed ? 'INSTALLED' : 'AVAILABLE'}</b></div><div><span>Config</span><b>${plugin.config_present ? 'PRESENT' : 'NONE'}</b></div><div><span>Data</span><b>${plugin.data_present ? 'PRESENT' : 'NONE'}</b></div><div><span>Dependencies</span><b class="plugin-check-${deps.cls}">${deps.text}</b></div><div><span>Hardware</span><b class="plugin-check-${hardware.cls}">${hardware.text}</b></div></div>`;
   }
 
   function packageActions(plugin) {
     const id = escp(plugin.id);
-    const lifecycle = plugin.installed
-      ? `<button class="btn danger" data-plugin-action="package-uninstall" data-plugin-id="${id}">UNINSTALL</button>`
-      : `<button class="btn good" data-plugin-action="package-install" data-plugin-id="${id}">INSTALL</button>`;
-    const removeData = plugin.config_present || plugin.data_present
-      ? `<button class="btn danger" data-plugin-action="package-data-remove" data-plugin-id="${id}">REMOVE DATA</button>` : '';
+    const lifecycle = plugin.installed ? `<button class="btn danger" data-plugin-action="package-uninstall" data-plugin-id="${id}">UNINSTALL</button>` : `<button class="btn good" data-plugin-action="package-install" data-plugin-id="${id}">INSTALL</button>`;
+    const removeData = plugin.config_present || plugin.data_present ? `<button class="btn danger" data-plugin-action="package-data-remove" data-plugin-id="${id}">REMOVE DATA</button>` : '';
     return `<div class="buttonrow wrap plugin-package-actions">${lifecycle}<button class="btn" data-plugin-action="package-check-deps" data-plugin-id="${id}">CHECK DEPENDENCIES</button><button class="btn" data-plugin-action="package-check-hardware" data-plugin-id="${id}">CHECK HARDWARE</button>${removeData}</div>`;
   }
 
+  function telemetryPanel(plugin) {
+    if (plugin.provider !== 'mmdvm-telemetry' || !plugin.effective_enabled) return '';
+    const id = escp(plugin.id), data = plugin.data || {}, bridge = data.bridge || {}, rssi = data.rssi || {}, ber = data.ber || {};
+    const call = data.active_call || null;
+    const callText = call ? `${escp(call.src_info || call.src_id || 'unknown')} → ${String(call.group || '').toLowerCase() === 'yes' ? 'TG ' : ''}${escp(call.dst_id ?? 'unknown')} · TS${escp(call.slot ?? '?')} · ${escp(call.source || '?')}` : 'idle';
+    return `<div class="plugin-telemetry" data-mmdvm-telemetry="${id}"><div class="plugin-telemetry-title"><span>LIVE MMDVM TELEMETRY</span><b id="telemetryBridge-${id}">${bridge.online ? 'ONLINE' : escp(String(bridge.status || 'OFFLINE').toUpperCase())}</b></div><div class="plugin-meta plugin-telemetry-metrics"><div><span>Mode</span><b id="telemetryMode-${id}">${escp(String(data.mode || 'idle').toUpperCase())}</b></div><div><span>RSSI</span><b id="telemetryRssi-${id}">${rssi.value == null ? '—' : `${escp(Number(rssi.value).toFixed(0))} dBm`}</b></div><div><span>BER</span><b id="telemetryBer-${id}">${ber.value == null ? '—' : `${escp(Number(ber.value).toFixed(2))} %`}</b></div><div><span>Payload age</span><b id="telemetryAge-${id}">${data.last_payload_age_s == null ? '—' : `${escp(Number(data.last_payload_age_s).toFixed(1))}s`}</b></div><div><span>Messages</span><b id="telemetryMessages-${id}">${escp(bridge.messages ?? 0)}</b></div></div><div class="plugin-telemetry-call"><span>Active DMR</span><b id="telemetryCall-${id}">${callText}</b></div></div>`;
+  }
+
   function pluginCard(plugin, systemEnabled) {
-    const installed = !!plugin.installed;
-    const good = plugin.health === 'active';
-    const bad = plugin.health === 'error';
-    const stopped = plugin.health === 'stopped';
+    const installed = !!plugin.installed; const good = plugin.health === 'active'; const bad = plugin.health === 'error'; const stopped = plugin.health === 'stopped';
     const status = bad ? 'ERROR' : !installed ? 'AVAILABLE' : good ? 'ACTIVE' : stopped ? 'STOPPED' : 'DISABLED';
     const caps = (plugin.capabilities || []).map(cap => `<span class="plugin-cap">${escp(cap)}</span>`).join('') || '<span class="plugin-cap">no capabilities</span>';
     const fields = installed && plugin.valid ? (plugin.schema?.fields || []).map(field => schemaField(plugin, field)).join('') : '';
     const data = plugin.data || {};
-    const liveRows = plugin.effective_enabled && !plugin.service ? [
-      data.label ? `<div><span>Label</span><b>${escp(data.label)}</b></div>` : '',
-      data.hostname ? `<div><span>Hostname</span><b>${escp(data.hostname)}</b></div>` : '',
-      data.uptime_s != null ? `<div><span>Uptime</span><b>${escp(formatUptime(data.uptime_s))}</b></div>` : '',
-      data.temperature_c != null ? `<div><span>Temperature</span><b>${escp(data.temperature_c)} °C</b></div>` : '',
-      Array.isArray(data.load) ? `<div><span>Load</span><b>${escp(data.load.map(x => Number(x).toFixed(2)).join(' / '))}</b></div>` : '',
-    ].filter(Boolean).join('') : '';
+    const liveRows = plugin.effective_enabled && !plugin.service ? [data.label ? `<div><span>Label</span><b>${escp(data.label)}</b></div>` : '',data.hostname ? `<div><span>Hostname</span><b>${escp(data.hostname)}</b></div>` : '',data.uptime_s != null ? `<div><span>Uptime</span><b>${escp(formatUptime(data.uptime_s))}</b></div>` : '',data.temperature_c != null ? `<div><span>Temperature</span><b>${escp(data.temperature_c)} °C</b></div>` : '',Array.isArray(data.load) ? `<div><span>Load</span><b>${escp(data.load.map(x => Number(x).toFixed(2)).join(' / '))}</b></div>` : ''].filter(Boolean).join('') : '';
     const errorText = plugin.error || plugin.config_error || '';
     const serviceButtons = installed && plugin.service ? `<div class="buttonrow wrap plugin-runtime-actions"><button class="btn good" data-plugin-action="service-start" data-plugin-id="${escp(plugin.id)}">START</button><button class="btn danger" data-plugin-action="service-stop" data-plugin-id="${escp(plugin.id)}">STOP RUNTIME</button><button class="btn" data-plugin-action="service-restart" data-plugin-id="${escp(plugin.id)}">RESTART</button><button class="btn" data-plugin-action="service-logs" data-plugin-id="${escp(plugin.id)}">LOGS</button></div>` : '';
     const enableButtons = installed ? `<div class="buttonrow wrap"><button class="btn ${plugin.enabled ? 'danger' : 'good'}" data-plugin-action="plugin-toggle" data-plugin-id="${escp(plugin.id)}" data-enabled="${plugin.enabled ? '0' : '1'}"${!plugin.valid || !systemEnabled ? ' disabled' : ''}>${plugin.enabled ? 'DISABLE' : 'ENABLE'}</button><button class="btn" data-plugin-action="plugin-test" data-plugin-id="${escp(plugin.id)}"${!plugin.effective_enabled || (plugin.service && plugin.health !== 'active') ? ' disabled' : ''}>TEST</button></div>` : '';
-    return `<article class="card plugin-card${good ? ' active' : ''}${bad ? ' error' : ''}${!installed ? ' available' : ''}" data-plugin-card="${escp(plugin.id)}">
-      <div class="plugin-title"><div><h3>${escp(plugin.name)}</h3><small>${escp(plugin.id)} · v${escp(plugin.version)}</small></div><span class="badge ${good ? 'applied' : bad ? 'pending' : ''}">${status}</span></div>
-      <p class="plugin-description">${escp(plugin.description || errorText || 'Plugin package could not be loaded.')}</p>
-      <div class="plugin-meta"><div><span>Trust</span><b>${escp(plugin.trust || 'unknown')}</b></div><div><span>Model</span><b>${escp(plugin.kind || 'invalid')}</b></div><div><span>RF mode</span><b>${plugin.rf_mode ? 'YES' : 'NO'}</b></div><div><span>Service</span><b>${escp(plugin.service || 'none')}</b></div></div>
-      ${packageRows(plugin)}${serviceRows(plugin)}<div class="plugin-caps">${caps}</div>${errorText ? `<div class="notice plugin-warning">${escp(errorText)}</div>` : ''}${liveRows ? `<div class="plugin-meta">${liveRows}</div>` : ''}
-      ${packageActions(plugin)}${enableButtons}${serviceButtons}<div id="pluginResult-${escp(plugin.id)}" class="plugin-result" hidden></div>
-      ${installed && plugin.valid ? `<details class="plugin-config"><summary>CONFIGURE</summary><div class="plugin-config-grid">${fields}</div><div class="buttonrow"><button class="btn primary" data-plugin-action="config-save" data-plugin-id="${escp(plugin.id)}">SAVE PLUGIN CONFIG</button></div></details>` : ''}</article>`;
+    return `<article class="card plugin-card${good ? ' active' : ''}${bad ? ' error' : ''}${!installed ? ' available' : ''}" data-plugin-card="${escp(plugin.id)}"><div class="plugin-title"><div><h3>${escp(plugin.name)}</h3><small>${escp(plugin.id)} · v${escp(plugin.version)}</small></div><span class="badge ${good ? 'applied' : bad ? 'pending' : ''}">${status}</span></div><p class="plugin-description">${escp(plugin.description || errorText || 'Plugin package could not be loaded.')}</p><div class="plugin-meta"><div><span>Trust</span><b>${escp(plugin.trust || 'unknown')}</b></div><div><span>Model</span><b>${escp(plugin.kind || 'invalid')}</b></div><div><span>RF mode</span><b>${plugin.rf_mode ? 'YES' : 'NO'}</b></div><div><span>Service</span><b>${escp(plugin.service || 'none')}</b></div></div>${packageRows(plugin)}${serviceRows(plugin)}<div class="plugin-caps">${caps}</div>${errorText ? `<div class="notice plugin-warning">${escp(errorText)}</div>` : ''}${liveRows ? `<div class="plugin-meta">${liveRows}</div>` : ''}${telemetryPanel(plugin)}${packageActions(plugin)}${enableButtons}${serviceButtons}<div id="pluginResult-${escp(plugin.id)}" class="plugin-result" hidden></div>${installed && plugin.valid ? `<details class="plugin-config"><summary>CONFIGURE</summary><div class="plugin-config-grid">${fields}</div><div class="buttonrow"><button class="btn primary" data-plugin-action="config-save" data-plugin-id="${escp(plugin.id)}">SAVE PLUGIN CONFIG</button></div></details>` : ''}</article>`;
   }
 
-
-  window.ywdPluginCardRenderer = {
-    pluginCard(plugin, systemEnabled, utils = {}) {
-      if (typeof utils.escp === 'function') escp = utils.escp;
-      if (typeof utils.formatUptime === 'function') formatUptime = utils.formatUptime;
-      return pluginCard(plugin, systemEnabled);
-    }
-  };
+  window.ywdPluginCardRenderer = { pluginCard(plugin, systemEnabled, utils = {}) { if (typeof utils.escp === 'function') escp = utils.escp; if (typeof utils.formatUptime === 'function') formatUptime = utils.formatUptime; return pluginCard(plugin, systemEnabled); } };
 })();
