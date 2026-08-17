@@ -1,4 +1,4 @@
-/* Alpha10-dev WebUI micro-polish.
+/* Alpha12.2-dev WebUI micro-polish.
  * Kept in a same-origin stylesheet so the dashboard's strict CSP stays intact.
  */
 
@@ -32,6 +32,26 @@
 .modal.closing .dialog{animation:ywdModalOut .12s ease-in forwards}
 .modal .dialog{max-height:calc(100dvh - 40px);overflow:auto}
 
+/* Unlock failures belong inside the unlock dialog instead of behind it as a toast. */
+.login-feedback{
+  margin:10px 0 0;
+  padding:9px 10px;
+  border:1px solid rgba(255,108,125,.48);
+  border-radius:7px;
+  background:rgba(86,18,31,.34);
+  color:#ff9baa;
+  font-size:11px;
+  font-weight:700;
+  letter-spacing:.02em;
+  box-shadow:0 0 18px rgba(255,108,125,.08);
+}
+.login-feedback::before{content:"! ";color:var(--bad);font-weight:900}
+.login-feedback[hidden]{display:none!important}
+#loginPw[aria-invalid="true"]{
+  border-color:var(--bad)!important;
+  box-shadow:0 0 0 2px rgba(255,108,125,.12),0 0 14px rgba(255,108,125,.08)!important;
+}
+
 /* Async action feedback. The original label is restored when the Promise settles. */
 .btn.ywd-working{
   cursor:wait!important;
@@ -51,8 +71,8 @@
   animation:ywdSpin .7s linear infinite;
 }
 
-/* Talkgroup Manager classes previously injected from JS are repeated here so
- * they are fully effective under style-src 'self'. */
+/* Talkgroup Manager classes previously injected from JS live here so they are
+ * fully effective under style-src 'self'. */
 .tg-spacer{margin-top:12px}
 .tg-id{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-weight:700}
 .tg-plan-add{border-color:rgba(68,255,170,.45)}
