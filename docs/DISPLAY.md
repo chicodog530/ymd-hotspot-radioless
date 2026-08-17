@@ -21,7 +21,7 @@ Enhanced instrumentation uses the same `/api/status` payload the dashboard alrea
 |---|---|
 | `basic` | Enhanced instrumentation disabled; current lightweight status UI |
 | `balanced` | Signal/quality/TX meters with restrained animation and no rolling traces |
-| `instrument` | Signal/quality/TX meters plus RSSI/BER history traces |
+| `instrument` | Signal/quality/TX meters plus sample-based RSSI/BER history traces |
 | `maximum` | Full meters, traces, peak hold, idle animation, live top-strip details |
 | `custom` | Automatically selected after changing individual instrumentation controls |
 
@@ -36,8 +36,10 @@ Configuration is stored under `display.instrumentation` in the canonical config 
 - peak hold and hold duration
 - BER quality meter and excellent/good/fair thresholds
 - TX/RF drive meter
-- rolling RSSI and BER histories
-- history length
+- post-call measurement hold
+- RSSI and BER histories
+- sample-count history or time-window history
+- maximum sample age
 - browser render-rate target: 5, 10, or 20 fps
 - animation intensity: off, subtle, normal, or high
 - idle animation
@@ -45,25 +47,99 @@ Configuration is stored under `display.instrumentation` in the canonical config 
 - numeric values and label density
 - reduced-motion policy
 
-### Data honesty
+## 📡 RX behavior and measurement timing
+
+The normal YWD activity collector intentionally follows the existing MMDVM-Host journal rather than adding another telemetry service.
+
+During an active **RF → hotspot** call, the enhanced panel therefore shows:
+
+```text
+RX FROM RADIO
+SIGNAL   SAMPLING…
+QUALITY  MEASURING…
+```
+
+When MMDVM-Host writes the completed RF-call summary, YWD-Hotspot receives the measured average RSSI and BER. The gauges then populate with the real completed-call values and may remain on screen for `measurement_hold_s` seconds.
+
+This avoids displaying a fake live signal value simply to make the meter move.
+
+### Why not display MMDVM-Host's internal ~1-second values?
+
+The pinned MMDVM-Host build does internally accumulate RSSI and BER in roughly 1.08-second intervals during RF receive. Its live JSON RSSI/BER output, however, is emitted through MMDVM-Host's optional MQTT path rather than the normal journal stream used by YWD-Hotspot.
+
+YWD-Hotspot deliberately does **not** add an MQTT broker/client stack to the original Pi Zero merely to animate two gauges. The current appliance therefore uses the lightweight journal collector and honest completed-call measurements. A future telemetry path can be considered if it remains similarly lightweight and does not alter the RF stability baseline.
+
+## 📤 TX behavior
+
+During **network → RF** transmission there is no incoming RF RSSI to measure, so the enhanced panel does not show an empty RX signal gauge as though something were broken.
+
+TX mode instead prioritizes:
+
+- configured TX/DMR level
+- configured RF level
+- source and destination
+- slot / elapsed time
+- network quality state
+
+While the transmission is active, network quality is shown as **PENDING**. Once MMDVM-Host reports the completed network transmission, packet loss and BER are shown when available.
+
+TX Level and RF Level are configured drive values, **not measured RF output power**.
+
+## 📈 History modes
+
+RSSI/BER history uses completed RF measurements only.
+
+### Last samples
+
+The recommended/default mode keeps the last N completed RF measurements up to a configurable maximum age:
+
+```text
+history_mode       samples
+history_samples    20
+history_max_age_s  900
+```
+
+This is useful on a quiet hotspot because a good sample does not disappear merely because 30 seconds passed with no traffic.
+
+### Time window
+
+Time mode retains completed RF samples within a configured number of seconds:
+
+```text
+history_mode       time
+history_seconds    60
+```
+
+Both modes remain bounded and browser-side.
+
+## 🔐 Strict CSP behavior
+
+The dashboard retains its restrictive `style-src 'self'` Content Security Policy. Alpha12.1 removes the remaining Talkgroup Manager `<style>` injection and avoids JavaScript `style.width` / `style.height` updates for instrument and update-progress bars.
+
+Dynamic meter levels are represented with bounded `data-*` states and styled by same-origin external CSS. YWD-Hotspot does **not** enable `unsafe-inline` to make the gauges work.
+
+## 🎛️ Data honesty
 
 The instrument panel distinguishes measured data from presentation:
 
 - RSSI is shown only when MMDVM activity contains RSSI data.
 - BER is shown only when captured from MMDVM activity.
-- TX level/RF level are configured drive values, not a measured RF power meter.
+- active RX explicitly says sampling/measuring until the completed-call values arrive.
+- TX/RF levels are configured drive values, not a wattmeter.
+- network packet-loss/BER values appear when the completed network call reports them.
 - animated RF energy is an activity visualization, **not** an audio VU meter or spectrum analyzer.
 
-When a measurement is unavailable, the UI shows an unavailable/empty state instead of inventing a value.
-
-### Performance behavior
+## ⚡ Performance behavior
 
 The original Pi Zero W remains the performance budget.
 
-- Basic mode does not initialize rolling history/animation work.
+- Basic mode does not initialize rolling-history/animation work.
 - Enhanced rendering occurs in the browser, not in a new Pi-side daemon.
-- The page visibility state is honored so hidden/background tabs do not keep unnecessary animation work running.
+- Enhanced mode reuses the dashboard status payload instead of adding another Pi polling loop.
+- History arrays are small and bounded.
+- Render-rate choices are 5, 10, or 20 fps.
 - Reduced-motion can follow the browser/OS preference or be forced from YWD settings.
+- No MQTT broker, SQL database, Node runtime, or chart framework is required.
 
 ## 📟 OLED architecture
 
@@ -134,7 +210,7 @@ The OLED can show group or private-call destinations. `talkgroup_format` support
 
 Talkgroup names are resolved only from the existing local BrandMeister talkgroup cache. If a name is unavailable, the numeric destination remains the fallback.
 
-## 📊 Optional live fields
+## 📊 Optional OLED live fields
 
 The runtime display can independently show:
 
@@ -166,21 +242,27 @@ The cycle is disabled by default so the OLED can remain a stable status display.
 
 When the WebUI detached updater is active, the OLED may consume the sanitized local update-status file and show the update phase/progress. This is display-only; the OLED does not control the update.
 
+The WebUI progress modal also uses same-origin CSS-driven progress states and reconnects after the intentional dashboard restart. Brief browser `ERR_CONNECTION_REFUSED` messages during that restart are expected; the detached update continues outside the dashboard process.
+
 ## ⚙️ Canonical configuration
 
-Display settings live under `display` in `/etc/ywd-hotspot/config.json`. Schema 4 adds the runtime OLED and instrumentation controls while preserving existing configurations through normalization/defaulting.
+Display settings live under `display` in `/etc/ywd-hotspot/config.json`. Schema 5 adds the measurement-hold and history-mode controls while preserving earlier display settings through normalization/defaulting.
 
-Important defaults are conservative:
+Important defaults remain conservative:
 
 ```text
 OLED runtime mode             basic
 WebUI enhanced instruments    disabled
 Instrumentation preset        basic
+Instrument history mode       samples
+Instrument history samples    20
+Instrument sample max age     900 sec
+Measurement hold              5 sec
 Idle page cycling             disabled
 Rotation                      0°
 ```
 
-An update therefore keeps the existing lightweight presentation until the operator opts into the enhanced modes.
+An update therefore keeps the lightweight presentation until the operator opts into enhanced modes.
 
 ---
 
