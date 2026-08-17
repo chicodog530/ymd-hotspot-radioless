@@ -404,6 +404,12 @@ Do not casually move these pins during calibration/stability work.
 Written by **KJ6YWD**. Project home: **https://kj6ywd.net**  
 Canonical repository: **https://github.com/merberg-ai/ywd-hotspot**
 
+## 🙌 Acknowledgments
+
+Special thanks to **KE0CGB** who forked the original author's work and provided significant inspiration and foundational improvements that made this project possible.
+
+This project also integrates the [jmbe](https://github.com/DSheirer/jmbe) Java Multi-Band Excitation library for AMBE+2 encoding and decoding.
+
 ## 📄 License
 
 YWD-Hotspot is released under the **[Unlicense](LICENSE)** / public-domain dedication included in this repository.
