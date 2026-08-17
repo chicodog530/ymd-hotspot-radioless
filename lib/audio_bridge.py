@@ -32,6 +32,7 @@ class AudioBridge:
         self.seq = 0
         self.dmr_id = 0
         self.callsign = "NOCALL"
+        self.connected_clients = set()
         self.load_config()
         
     def load_config(self):
@@ -57,28 +58,25 @@ class AudioBridge:
         try:
             JMBEAudioLibrary = jpype.JClass("jmbe.JMBEAudioLibrary")
             self.jmbe_lib = JMBEAudioLibrary()
-            self.ambe_codec = self.jmbe_lib.getAudioConverter("AMBE")
-            logging.info("JMBE AMBE codec initialized successfully.")
+            self.ambe_codec = self.jmbe_lib.getAudioConverter("AMBE 3600 x 2450")
+            logging.info("JMBE AMBE decoder initialized successfully.")
         except Exception as e:
             logging.error(f"Failed to load JMBE classes: {e}")
             sys.exit(1)
 
-    def encode_pcm_to_ambe(self, pcm_data):
-        if not self.ambe_codec: return None
-        try:
-            pcm_floats = jpype.JArray(jpype.JFloat)(pcm_data)
-            ambe_bytes = self.ambe_codec.encode(pcm_floats)
-            return bytes(ambe_bytes)
-        except Exception as e:
-            logging.error(f"Encode error: {e}")
-            return None
-
     def decode_ambe_to_pcm(self, ambe_data):
         if not self.ambe_codec: return None
         try:
-            java_bytes = jpype.JArray(jpype.JByte)(ambe_data)
-            pcm_floats = self.ambe_codec.decode(java_bytes)
-            return list(pcm_floats)
+            # We expect 27 bytes of ambe_data (3 frames of 9 bytes)
+            all_pcm = []
+            for i in range(0, len(ambe_data), 9):
+                frame = ambe_data[i:i+9]
+                if len(frame) == 9:
+                    java_bytes = jpype.JArray(jpype.JByte)(frame)
+                    pcm_floats = self.ambe_codec.getAudio(java_bytes)
+                    if pcm_floats:
+                        all_pcm.extend(list(pcm_floats))
+            return all_pcm
         except Exception as e:
             logging.error(f"Decode error: {e}")
             return None
@@ -111,8 +109,14 @@ class AudioBridge:
                 if data.startswith(b"DMRD"):
                     logging.info("DMRGateway Login Accepted!")
                 elif data.startswith(b"DMRV"):
-                    # Process incoming voice here later
-                    pass
+                    # Format: "DMRV" (4s), seq (B), src (I), dst (I), type (B), slot (B)
+                    if len(data) >= 15:
+                        ambe_data = data[15:42]
+                        if ambe_data and self.connected_clients:
+                            pcm_floats = self.decode_ambe_to_pcm(ambe_data)
+                            if pcm_floats:
+                                pcm_bytes = struct.pack(f"<{len(pcm_floats)}f", *pcm_floats)
+                                websockets.broadcast(self.connected_clients, pcm_bytes)
             except BlockingIOError:
                 pass
             
@@ -120,41 +124,18 @@ class AudioBridge:
 
     async def handle_client(self, websocket, path):
         logging.info(f"New Web Terminal connected from {websocket.remote_address}")
+        self.connected_clients.add(websocket)
         try:
             async for message in websocket:
                 if isinstance(message, str):
                     data = json.loads(message)
                     logging.info(f"Control message: {data}")
                     if data.get("type") == "control":
-                        self.is_transmitting = data.get("ptt", False)
                         self.current_tg = data.get("tg")
-                        # Reset sequence number when PTT starts
-                        if self.is_transmitting:
-                            self.seq = 0
-                elif isinstance(message, bytes):
-                    count = len(message) // 2
-                    shorts = struct.unpack(f"<{count}h", message)
-                    pcm_floats = [s / 32768.0 for s in shorts]
-                    
-                    if getattr(self, "is_transmitting", False) and hasattr(self, "bm_sock"):
-                        ambe_data = self.encode_pcm_to_ambe(pcm_floats)
-                        if ambe_data:
-                            # Construct valid MMDVM DMR voice frame
-                            try:
-                                tg = int(self.current_tg) if getattr(self, "current_tg", None) else 91
-                            except ValueError:
-                                tg = 91
-                                
-                            seq = self.seq % 256
-                            self.seq += 1
-                            
-                            # Format: "DMRV" (4s), seq (B), src (I), dst (I), type (B), slot (B)
-                            # Type 1 = Group, Slot 2 = TS2
-                            header = struct.pack("!4s B I I B B", b"DMRV", seq, self.dmr_id, tg, 1, 2)
-                            dmr_frame = header + ambe_data
-                            self.bm_sock.sendto(dmr_frame, self.bm_addr)
         except websockets.exceptions.ConnectionClosed:
             logging.info("Web Terminal disconnected.")
+        finally:
+            self.connected_clients.remove(websocket)
             
     async def serve(self, host="0.0.0.0", port=8081):
         self.start_jvm()
