@@ -1,0 +1,20 @@
+[Unit]
+Description=YWD-Hotspot Audio Bridge (Radio-less DMR Terminal)
+After=network-online.target ywd-dmrgateway.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ywd-hotspot
+Group=ywd-hotspot
+WorkingDirectory=/opt/ywd-hotspot/app/lib
+ExecStart=/usr/bin/python3 /opt/ywd-hotspot/app/lib/audio_bridge.py
+Restart=always
+RestartSec=5
+# Allow it to bind to high ports and do network IO
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
