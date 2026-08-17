@@ -4,6 +4,13 @@ if [[ $EUID -ne 0 ]]; then exec sudo "$0" "$@"; fi
 echo "This removes YWD-Hotspot services/binaries but keeps configuration/history by default."
 read -r -p "Type REMOVE to continue: " a
 [[ "$a" == REMOVE ]] || exit 0
+
+# If this application had taken over the OS-owned headless OLED renderer, put
+# the image's original ExecStart back before removing /opt/ywd-hotspot.
+if [[ -f /opt/ywd-hotspot/app/lib/oled_owner.sh ]]; then
+  bash /opt/ywd-hotspot/app/lib/oled_owner.sh restore /opt/ywd-hotspot/app || true
+fi
+
 systemctl disable --now ywd-dmrgateway.service ywd-mmdvmhost.service ywd-dashboard.service ywd-activity.service ywd-oled.service ywd-dmrid-update.timer 2>/dev/null || true
 systemctl stop ywd-update.service 2>/dev/null || true
 rm -f /etc/systemd/system/ywd-{dmrgateway,mmdvmhost,dashboard,activity,oled,dmrid-update,update}.service /etc/systemd/system/ywd-dmrid-update.timer
