@@ -74,17 +74,35 @@ def set_system(data):
     if not isinstance(enabled, bool):
         raise ValueError("enabled must be true or false")
     state = plugin_manager.read_state()
-    warnings = []
+    disabled_plugins = []
+
     if not enabled:
+        # Stop/unload every valid plugin before the master state is committed.
+        # API v1 has no service-backed plugins yet, but this transaction order is
+        # the contract later plugin APIs must preserve.
+        errors = []
         for entry in plugin_manager.discover():
             if not entry.get("valid"):
                 continue
-            warning = stop_plugin_service(entry["manifest"])
-            if warning:
-                warnings.append(warning)
+            manifest = entry["manifest"]
+            ident = manifest.get("id")
+            if bool((state.get("plugins", {}).get(ident) or {}).get("enabled", False)):
+                disabled_plugins.append(ident)
+            error = stop_plugin_service(manifest)
+            if error:
+                errors.append(error)
+        if errors:
+            raise RuntimeError("could not safely stop all plugin services: " + "; ".join(errors)[:600])
+
+        # Master OFF means fully disabled, not "armed". Keep configuration files,
+        # but clear every per-plugin activation flag so re-enabling the subsystem
+        # cannot silently reactivate anything.
+        for ident in list(state.setdefault("plugins", {})):
+            state["plugins"][ident] = {"enabled": False}
+
     state["enabled"] = enabled
     atomic_json(plugin_manager.STATE, state)
-    return {"ok": True, "enabled": enabled, "warnings": warnings}
+    return {"ok": True, "enabled": enabled, "disabled_plugins": disabled_plugins}
 
 
 def set_plugin(data):
@@ -101,9 +119,11 @@ def set_plugin(data):
     warning = None
     if not enabled:
         warning = stop_plugin_service(plugin)
+        if warning:
+            raise RuntimeError(warning)
     state.setdefault("plugins", {})[ident] = {"enabled": enabled}
     atomic_json(plugin_manager.STATE, state)
-    return {"ok": True, "id": ident, "enabled": enabled, "warning": warning}
+    return {"ok": True, "id": ident, "enabled": enabled}
 
 
 def save_config(data):
