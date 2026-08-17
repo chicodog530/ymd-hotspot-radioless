@@ -15,9 +15,15 @@ except ImportError:
     print("Missing dependencies. Please run: pip3 install jpype1 websockets")
     sys.exit(1)
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+import glob
 
-JMBE_JAR_PATH = os.path.join(os.path.dirname(__file__), "jmbe", "codec", "build", "libs", "jmbe-1.0.9.jar")
+# Find the built JMBE jar regardless of version number
+JMBE_JAR_PATTERN = os.path.join(os.path.dirname(__file__), "jmbe", "codec", "build", "libs", "jmbe-*.jar")
+try:
+    JMBE_JAR_PATH = glob.glob(JMBE_JAR_PATTERN)[0]
+except IndexError:
+    JMBE_JAR_PATH = "/path/not/found.jar"
+
 
 class AudioBridge:
     def __init__(self):
