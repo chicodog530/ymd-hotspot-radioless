@@ -19,7 +19,7 @@
 ---
 
 > [!IMPORTANT]
-> **Development status:** `0.1.0-alpha12.1-dev` is the active `dev` build. `main` remains the promoted/conservative line. Alpha12.1 polishes the optional LIVE DMR instrument panel with strict-CSP-safe meters, mode-aware RX/TX instrumentation, completed-call measurement hold, and more useful sample-based histories. Basic display modes remain the low-overhead defaults.
+> **Development status:** `0.1.0-alpha12.2-dev` is the active `dev` build. `0.1.0-alpha12.1-dev` is preserved at `dev-alpha12.1-known-good` after successful Pi/mobile/desktop testing. Alpha12.2 is a focused UX hotfix for clearer unlock-password errors and immediate About-page update-start feedback; the RF stack and Alpha12.1 instrumentation/OLED architecture are unchanged.
 
 > [!WARNING]
 > The built-in WebUI is plain HTTP for a trusted LAN. Do **not** forward the dashboard port directly to the public Internet.
@@ -175,7 +175,7 @@ sudo ywd-hotspotctl update-channel main
 sudo ywd-hotspotctl update-channel dev
 ```
 
-GitHub-managed installs also expose **ABOUT → SOFTWARE UPDATE** when WebUI controls are unlocked. The WebUI updater validates the saved channel, starts a detached one-shot update job, and shows real stage-driven progress while the dashboard restarts/reconnects.
+GitHub-managed installs also expose **ABOUT → SOFTWARE UPDATE** when WebUI controls are unlocked. The WebUI updater validates the saved channel, starts a detached one-shot update job, and shows real stage-driven progress while the dashboard restarts/reconnects. The final install button gives immediate busy/spinner feedback while the detached service is being launched so there is no silent gap before the progress modal appears.
 
 The updater preserves RF active/enabled policy and keeps a protected pre-update backup. Browser code cannot supply arbitrary root shell commands or update URLs/branches.
 
@@ -314,7 +314,7 @@ Install/update writes non-secret provenance to:
 The CLI and About page show:
 
 ```text
-Version         0.1.0-alpha12.1-dev
+Version         0.1.0-alpha12.2-dev
 Git branch      dev
 Update channel  dev
 Git commit      <commit SHA>
