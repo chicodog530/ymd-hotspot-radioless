@@ -316,15 +316,13 @@ def set_web_password(payload):
 
 def rf_action(action):
     if action == "rf-start":
-        run(["systemctl", "start", "ywd-mmdvmhost.service"], 15, check=True); time.sleep(1)
-        run(["systemctl", "start", "ywd-dmrgateway.service"], 15, check=True)
+        run(["systemctl", "start", "ywd-dmrgateway.service"], 15, check=False)
+        run(["systemctl", "start", "ywd-mmdvmhost.service"], 15, check=True)
     elif action == "rf-stop":
-        run(["systemctl", "stop", "ywd-dmrgateway.service", "ywd-mmdvmhost.service"], 15, check=False)
+        run(["systemctl", "stop", "ywd-mmdvmhost.service"], 15, check=False)
     elif action == "rf-restart":
-        ga = active("ywd-dmrgateway.service")
-        if ga: run(["systemctl", "stop", "ywd-dmrgateway.service"], 12)
-        run(["systemctl", "restart", "ywd-mmdvmhost.service"], 15, check=True); time.sleep(1)
-        if ga: run(["systemctl", "start", "ywd-dmrgateway.service"], 15, check=True)
+        run(["systemctl", "restart", "ywd-dmrgateway.service"], 15, check=False)
+        run(["systemctl", "restart", "ywd-mmdvmhost.service"], 15, check=True)
     else: raise ValueError("unknown RF action")
     audit(action)
     return {"ok": True}
