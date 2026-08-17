@@ -3,7 +3,7 @@
   let pluginState = null;
 
   const el = id => document.getElementById(id);
-  const escp = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const escp = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
   const unlocked = () => !!el('logoutBtn') && !el('logoutBtn').hidden;
   const notify = (message, bad = false) => {
     try { if (typeof toast === 'function') return toast(message, bad); } catch (_) {}
@@ -20,6 +20,30 @@
 
   async function post(url, body) {
     return jsonFetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body || {})});
+  }
+
+  async function confirmYwd(options) {
+    if (typeof window.ywdConfirm !== 'function') {
+      throw new Error('YWD confirmation UI is unavailable. Reload the dashboard and try again.');
+    }
+    return window.ywdConfirm(options);
+  }
+
+  function beginBusy(button, label) {
+    if (!button) return () => {};
+    const previous = button.textContent;
+    button.dataset.pluginBusy = '1';
+    button.disabled = true;
+    button.classList.add('ywd-working');
+    button.setAttribute('aria-busy', 'true');
+    if (label) button.textContent = label;
+    return () => {
+      if (!button.isConnected) return;
+      delete button.dataset.pluginBusy;
+      button.classList.remove('ywd-working');
+      button.removeAttribute('aria-busy');
+      button.textContent = previous;
+    };
   }
 
   function formatUptime(seconds) {
@@ -106,7 +130,7 @@
   function pluginCard(plugin, systemEnabled) {
     const good = plugin.health === 'active';
     const bad = plugin.health === 'error';
-    const status = bad ? 'ERROR' : good ? 'ACTIVE' : plugin.enabled ? 'ARMED' : 'DISABLED';
+    const status = bad ? 'ERROR' : good ? 'ACTIVE' : 'DISABLED';
     const caps = (plugin.capabilities || []).map(cap => `<span class="plugin-cap">${escp(cap)}</span>`).join('') || '<span class="plugin-cap">no capabilities</span>';
     const fields = plugin.valid ? (plugin.schema?.fields || []).map(field => schemaField(plugin, field)).join('') : '';
     const data = plugin.data || {};
@@ -134,7 +158,7 @@
       ${errorText ? `<div class="notice plugin-warning">${escp(errorText)}</div>` : ''}
       ${liveRows ? `<div class="plugin-meta">${liveRows}</div>` : ''}
       <div class="buttonrow wrap">
-        <button class="btn ${plugin.enabled ? 'danger' : 'good'}" data-plugin-action="plugin-toggle" data-plugin-id="${escp(plugin.id)}" data-enabled="${plugin.enabled ? '0' : '1'}"${!plugin.valid || (!plugin.enabled && !systemEnabled) ? ' disabled' : ''}>${plugin.enabled ? 'DISABLE' : 'ENABLE'}</button>
+        <button class="btn ${plugin.enabled ? 'danger' : 'good'}" data-plugin-action="plugin-toggle" data-plugin-id="${escp(plugin.id)}" data-enabled="${plugin.enabled ? '0' : '1'}"${!plugin.valid || !systemEnabled ? ' disabled' : ''}>${plugin.enabled ? 'DISABLE' : 'ENABLE'}</button>
         <button class="btn" data-plugin-action="plugin-test" data-plugin-id="${escp(plugin.id)}"${!plugin.effective_enabled ? ' disabled' : ''}>TEST</button>
       </div>
       <div id="pluginResult-${escp(plugin.id)}" class="plugin-result" hidden></div>
@@ -151,7 +175,7 @@
     stateEl.className = `plugin-system-state ${system.enabled ? 'good' : 'disabled'}`;
     el('pluginSystemMessage').textContent = system.enabled
       ? 'Plugin support is enabled. Only explicitly enabled, validated plugins may become active.'
-      : 'Plugin runtime is off. Installed packages remain inert until this master switch is enabled.';
+      : 'Plugin runtime is off. Individual plugins are disabled and will not auto-reactivate when the subsystem is enabled again.';
     el('pluginSummary').innerHTML = `
       <span class="badge">API ${escp(data?.api ?? 1)}</span>
       <span class="badge">${escp(system.installed || 0)} INSTALLED</span>
@@ -166,8 +190,8 @@
     const notice = el('pluginMasterNotice');
     notice.className = `notice ${system.enabled ? 'plugin-good' : 'plugin-warning'}`;
     notice.textContent = system.enabled
-      ? 'Plugin subsystem active. Disabling it is fail-closed: plugin services are stopped and normal core DMR operation is left alone.'
-      : 'When disabled, plugin packages remain installed but no plugin is active and plugin services are not permitted to run.';
+      ? 'Plugin subsystem active. Master disable stops/unloads active plugins, clears their activation state, and leaves core DMR operation alone.'
+      : 'Plugin subsystem disabled. Plugin configuration is preserved, but every plugin activation state is OFF until explicitly enabled again.';
     const plugins = Array.isArray(data?.plugins) ? data.plugins : [];
     el('pluginCards').innerHTML = plugins.length ? plugins.map(p => pluginCard(p, !!system.enabled)).join('') : '<article class="card plugin-empty">No plugin packages are installed.</article>';
     refreshControls();
@@ -177,16 +201,18 @@
     const auth = unlocked();
     const systemEnabled = !!pluginState?.system?.enabled;
     const master = el('pluginSystemToggle');
-    if (master) master.disabled = !auth;
+    if (master) master.disabled = !auth || master.dataset.pluginBusy === '1';
     document.querySelectorAll('#plugins [data-plugin-action="plugin-toggle"]').forEach(button => {
-      const enabling = button.dataset.enabled === '1';
-      button.disabled = !auth || (enabling && !systemEnabled);
+      const plugin = (pluginState?.plugins || []).find(p => p.id === button.dataset.pluginId);
+      button.disabled = button.dataset.pluginBusy === '1' || !auth || !systemEnabled || !plugin?.valid;
     });
     document.querySelectorAll('#plugins [data-plugin-action="plugin-test"]').forEach(button => {
       const plugin = (pluginState?.plugins || []).find(p => p.id === button.dataset.pluginId);
-      button.disabled = !auth || !plugin?.effective_enabled;
+      button.disabled = button.dataset.pluginBusy === '1' || !auth || !systemEnabled || !plugin?.effective_enabled;
     });
-    document.querySelectorAll('#plugins [data-plugin-action="config-save"]').forEach(button => button.disabled = !auth);
+    document.querySelectorAll('#plugins [data-plugin-action="config-save"]').forEach(button => {
+      button.disabled = button.dataset.pluginBusy === '1' || !auth;
+    });
   }
 
   async function loadPlugins() {
@@ -201,7 +227,7 @@
 
   function collectConfig(id) {
     const config = {};
-    document.querySelectorAll(`#plugins [data-plugin-config="${CSS.escape(id)}"]`).forEach(input => {
+    document.querySelectorAll(`#plugins [data-plugin-config="${id}"]`).forEach(input => {
       const key = input.dataset.pluginField;
       const type = input.dataset.fieldType;
       if (type === 'boolean') config[key] = !!input.checked;
@@ -216,21 +242,50 @@
     if (!button || button.disabled) return;
     const action = button.dataset.pluginAction;
     const id = button.dataset.pluginId;
+    let done = () => {};
     try {
-      button.disabled = true;
       if (action === 'system-toggle') {
         const enabled = button.dataset.enabled === '1';
-        if (!enabled && !confirm('Disable the entire plugin subsystem? Any plugin services will be stopped. Core DMR operation will remain untouched.')) return;
+        if (!enabled) {
+          const ok = await confirmYwd({
+            title: 'DISABLE PLUGIN SUBSYSTEM',
+            message: 'Disable the entire plugin subsystem?\n\nAll active plugins will be stopped/unloaded and individually disabled. Plugin configuration is preserved. Core DMR operation will remain untouched.',
+            confirmText: 'DISABLE ALL',
+            cancelText: 'CANCEL',
+            tone: 'danger',
+            kicker: 'YWD // PLUGINS'
+          });
+          if (!ok) return;
+        }
+        done = beginBusy(button, enabled ? 'ENABLING…' : 'DISABLING…');
         const data = await post('/api/plugins/system', {enabled});
-        render(data.plugins_state); notify(enabled ? 'Plugin support enabled' : 'All plugins disabled');
+        render(data.plugins_state);
+        notify(enabled ? 'Plugin support enabled' : 'All plugins safely disabled');
       } else if (action === 'plugin-toggle') {
         const enabled = button.dataset.enabled === '1';
+        const plugin = (pluginState?.plugins || []).find(p => p.id === id);
+        if (!enabled) {
+          const ok = await confirmYwd({
+            title: 'DISABLE PLUGIN',
+            message: `Disable ${plugin?.name || id}?\n\nIts configuration will be preserved, but it will remain off until explicitly enabled again.`,
+            confirmText: 'DISABLE PLUGIN',
+            cancelText: 'CANCEL',
+            tone: 'danger',
+            kicker: 'YWD // PLUGINS'
+          });
+          if (!ok) return;
+        }
+        done = beginBusy(button, enabled ? 'ENABLING…' : 'DISABLING…');
         const data = await post('/api/plugins/enable', {id, enabled});
-        render(data.plugins_state); notify(`${id} ${enabled ? 'enabled' : 'disabled'}`);
+        render(data.plugins_state);
+        notify(`${id} ${enabled ? 'enabled' : 'disabled'}`);
       } else if (action === 'config-save') {
+        done = beginBusy(button, 'SAVING…');
         const data = await post('/api/plugins/config', {id, config:collectConfig(id)});
-        render(data.plugins_state); notify(`${id} configuration saved`);
+        render(data.plugins_state);
+        notify(`${id} configuration saved`);
       } else if (action === 'plugin-test') {
+        done = beginBusy(button, 'TESTING…');
         const data = await post('/api/plugins/test', {id});
         if (data.plugins_state) render(data.plugins_state);
         const result = el(`pluginResult-${id}`);
@@ -251,6 +306,7 @@
       if (result) { result.hidden = false; result.className = 'plugin-result bad'; result.textContent = error.message; }
       notify(error.message, true);
     } finally {
+      done();
       refreshControls();
     }
   }
