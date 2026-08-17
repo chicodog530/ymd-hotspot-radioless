@@ -9,7 +9,7 @@ import json
 import re
 from pathlib import Path
 
-SCHEMA = 4
+SCHEMA = 5
 CALL_RE = re.compile(r"^[A-Z0-9]{3,10}(?:-[A-Z0-9]{1,2})?$")
 HOST_RE = re.compile(r"^[A-Za-z0-9.-]+$")
 
@@ -87,9 +87,13 @@ def defaults() -> dict:
                 "ber_good": 2.0,
                 "ber_fair": 5.0,
                 "tx_meter": True,
+                "measurement_hold_s": 5,
                 "history_rssi": True,
                 "history_ber": True,
-                "history_seconds": 30,
+                "history_mode": "samples",
+                "history_samples": 20,
+                "history_max_age_s": 900,
+                "history_seconds": 60,
                 "render_fps": 10,
                 "animation": "normal",
                 "idle_animation": True,
@@ -160,9 +164,13 @@ def _text(v, name, maxlen=160, allow_empty=True):
 
 
 def normalize(raw: dict, preserve_password: str | None = None) -> dict:
-    """Migrate old schemas, fill defaults, validate, and return canonical schema 4."""
+    """Migrate old schemas, fill defaults, validate, and return canonical schema 5."""
     if not isinstance(raw, dict):
         raise ValueError("configuration must be a JSON object")
+    try:
+        source_schema = int(raw.get("schema", 0) or 0)
+    except Exception:
+        source_schema = 0
     c = deep_merge(defaults(), raw)
     c["schema"] = SCHEMA
 
@@ -254,6 +262,15 @@ def normalize(raw: dict, preserve_password: str | None = None) -> dict:
     ins = d.get("instrumentation")
     if not isinstance(ins, dict):
         raise ValueError("display instrumentation must be an object")
+    # Schema 4 used a short time-window history. Schema 5 switches to sample
+    # history by default while preserving explicit values once schema 5 is saved.
+    if source_schema < 5:
+        ins.setdefault("measurement_hold_s", 5)
+        ins.setdefault("history_mode", "samples")
+        ins.setdefault("history_samples", 20)
+        ins.setdefault("history_max_age_s", 900)
+        if int(ins.get("history_seconds", 30) or 30) == 30:
+            ins["history_seconds"] = 60
     ins["enabled"] = bool(ins.get("enabled", False))
     ins["preset"] = _choice(ins.get("preset", "basic"), "instrumentation preset", {"basic", "balanced", "instrument", "maximum", "custom"})
     ins["signal_meter"] = bool(ins.get("signal_meter", True))
@@ -272,10 +289,16 @@ def normalize(raw: dict, preserve_password: str | None = None) -> dict:
     if not ins["ber_excellent"] <= ins["ber_good"] <= ins["ber_fair"]:
         raise ValueError("BER thresholds must be ordered excellent <= good <= fair")
     ins["tx_meter"] = bool(ins.get("tx_meter", True))
+    ins["measurement_hold_s"] = _int(ins.get("measurement_hold_s", 5), "instrument measurement hold", 0, 30)
     ins["history_rssi"] = bool(ins.get("history_rssi", True))
     ins["history_ber"] = bool(ins.get("history_ber", True))
-    ins["history_seconds"] = _int(ins.get("history_seconds", 30), "instrument history", 10, 180)
+    ins["history_mode"] = _choice(ins.get("history_mode", "samples"), "instrument history mode", {"samples", "time"})
+    ins["history_samples"] = _int(ins.get("history_samples", 20), "instrument history samples", 5, 60)
+    ins["history_max_age_s"] = _int(ins.get("history_max_age_s", 900), "instrument sample maximum age", 60, 3600)
+    ins["history_seconds"] = _int(ins.get("history_seconds", 60), "instrument time history", 10, 600)
     ins["render_fps"] = _int(ins.get("render_fps", 10), "instrument render rate", 5, 20)
+    if ins["render_fps"] not in {5, 10, 20}:
+        raise ValueError("instrument render rate must be 5, 10, or 20 fps")
     ins["animation"] = _choice(ins.get("animation", "normal"), "instrument animation", {"off", "subtle", "normal", "high"})
     ins["idle_animation"] = bool(ins.get("idle_animation", True))
     ins["live_status_strip"] = bool(ins.get("live_status_strip", True))
