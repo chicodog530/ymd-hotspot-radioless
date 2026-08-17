@@ -5,6 +5,9 @@ case "${1:-}" in
   setup-finish)
     exec /usr/local/libexec/ywd-hotspot-setup-admin "$@"
     ;;
+  update-check|update-start)
+    exec /usr/local/libexec/ywd-hotspot-update-admin "$@"
+    ;;
   *)
     exec /usr/local/libexec/ywd-hotspot-admin-core "$@"
     ;;
