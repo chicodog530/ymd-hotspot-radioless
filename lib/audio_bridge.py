@@ -22,10 +22,12 @@ logging.basicConfig(level=logging.INFO)
 # Find the built JMBE jars regardless of version number
 JMBE_API_JAR_PATTERN = os.path.join(os.path.dirname(__file__), "jmbe", "api", "build", "libs", "jmbe-api-*.jar")
 JMBE_JAR_PATTERN = os.path.join(os.path.dirname(__file__), "jmbe", "codec", "build", "libs", "jmbe-*.jar")
+JMBE_DEPS_PATTERN = os.path.join(os.path.dirname(__file__), "jmbe", "deps", "*.jar")
 try:
     JMBE_API_JAR_PATH = glob.glob(JMBE_API_JAR_PATTERN)[0]
     JMBE_JAR_PATH = glob.glob(JMBE_JAR_PATTERN)[0]
     JMBE_CLASSPATH = [JMBE_API_JAR_PATH, JMBE_JAR_PATH]
+    JMBE_CLASSPATH.extend(glob.glob(JMBE_DEPS_PATTERN))
 except IndexError:
     JMBE_CLASSPATH = []
 
