@@ -8,6 +8,7 @@ import time
 from urllib.parse import parse_qs, urlparse
 
 import dashboard_core as core
+import dashboard_update
 
 TG_CACHE = core.VAR / "talkgroup-directory.json"
 SETUP_STATE = core.VAR / "setup-state.json"
@@ -243,8 +244,9 @@ def main():
     w = c.get("web", {})
     bind = w.get("bind", "0.0.0.0")
     port = int(w.get("port", 8080))
-    print(f"YWD dashboard {core.VERSION} + Talkgroup Manager listening on {bind}:{port}", flush=True)
-    core.ThreadingHTTPServer((bind, port), H).serve_forever()
+    handler = dashboard_update.wrap_handler(H)
+    print(f"YWD dashboard {core.VERSION} + Talkgroup Manager + Software Update listening on {bind}:{port}", flush=True)
+    core.ThreadingHTTPServer((bind, port), handler).serve_forever()
 
 
 if __name__ == "__main__":
