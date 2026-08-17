@@ -3,7 +3,7 @@
   let pluginState = null;
 
   const el = id => document.getElementById(id);
-  const escp = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
+  const escp = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const unlocked = () => !!el('logoutBtn') && !el('logoutBtn').hidden;
   const notify = (message, bad = false) => {
     try { if (typeof toast === 'function') return toast(message, bad); } catch (_) {}
