@@ -1,6 +1,6 @@
 # 🧱 YWD-Hotspot Architecture
 
-[← Docs index](README.md) · [Project README](../README.md) · [Security](../SECURITY.md) · [Development notes](GITHUB-SETUP.md)
+[← Docs index](README.md) · [Project README](../README.md) · [Display](DISPLAY.md) · [Security](../SECURITY.md) · [Development notes](GITHUB-SETUP.md)
 
 ---
 
@@ -32,8 +32,32 @@ The core RF path does not depend on the dashboard, OLED, or activity presentatio
 |---|---|
 | `ywd-activity.service` | Parses MMDVM-Host activity into bounded cached state / Last Heard data |
 | `ywd-dashboard.service` | Python stdlib HTTP dashboard/API; reads cached state and routes validated writes through the admin helper |
-| `ywd-oled.service` | Optional I2C status/activity display; failure must not interrupt DMR |
+| `ywd-headless-oled.service` | YWD-Hotspot OS authoritative SSD1306/I2C owner using the unified renderer |
+| `ywd-oled.service` | Generic/non-OS OLED unit; kept disabled on YWD-Hotspot OS |
+| `ywd-update.service` | Detached one-shot software update job started only through authenticated update control |
 | `ywd-dmrid-update.timer` | Periodically refreshes lightweight RadioID data when due |
+
+## 📟 OLED ownership invariant
+
+YWD-Hotspot OS must have **exactly one process owning the physical OLED**.
+
+```text
+YWD-Hotspot OS
+  ywd-headless-oled.service
+           │
+           └── /opt/ywd-hotspot/app/lib/oled.py --os-owner
+
+Generic install
+  ywd-oled.service
+           │
+           └── /opt/ywd-hotspot/app/lib/oled.py
+```
+
+`lib/oled_owner.sh` installs a systemd drop-in on YWD-Hotspot OS so the existing headless daemon remains the sole owner while using the shared runtime renderer. The duplicate app OLED service is disabled there.
+
+Config apply/revert and manual OLED restart paths serialize ownership so the two services are never intentionally active against the same I2C device at once.
+
+The OLED renderer is a passive consumer. It may read local config/activity/network/update files and write the display. It must not control RF, networking, BrandMeister, or canonical configuration. OLED failure must not interrupt DMR.
 
 ## 🔐 Privilege boundary
 
@@ -50,6 +74,8 @@ with the restricted sudo policy:
 ```text
 /etc/sudoers.d/ywd-hotspot
 ```
+
+The dispatcher routes only named actions to dedicated helpers. Software update and OS OLED-owner transitions do not expose arbitrary branch names, shell commands, URLs, or paths to browser input.
 
 The browser must never directly execute arbitrary shell text or directly edit generated MMDVM-Host/DMRGateway INI files.
 
@@ -86,6 +112,8 @@ regenerate temporary INIs
 atomic apply / scoped service action
 ```
 
+Schema 4 adds OLED runtime-presentation and WebUI instrumentation controls. Existing schema-3 configurations are normalized with conservative defaults: current/basic OLED behavior and enhanced browser instrumentation disabled.
+
 Normal configuration history is retained separately for rollback.
 
 ## 🔑 Credential separation
@@ -117,9 +145,13 @@ Reusable secret material must not appear in browser-readable config, support sum
   calibration-baseline.json
   geocode-cache.json
   talkgroup-directory.json
+  update-status.json
   config-history.json
   audit.json
   private/
+
+/run/ywd-hotspot/
+  activity.json
 
 /var/backups/ywd-hotspot/
 ```
@@ -157,6 +189,8 @@ restore prior RF/service policy
 advance managed checkout after success
 ```
 
+WebUI installs start a detached `ywd-update.service`, allowing the dashboard to restart without killing its own updater. A sanitized status file provides stage/progress information to the browser and optionally to the OLED.
+
 Network failure, dirty source, or candidate-validation failure occurs before the live application is touched.
 
 ## 🌐 WebUI layers
@@ -164,17 +198,20 @@ Network failure, dirty source, or candidate-validation failure occurs before the
 The browser side intentionally stays small:
 
 ```text
-style.css          base dashboard theme
-app-core.js        established dashboard behavior
-talkgroups.js      Talkgroup Manager layer
-ui-polish.css      CSP-safe micro-polish / animation / busy states
-ui-polish.js       themed confirms + lightweight UX wrappers
-app.js             tiny loader
+style.css                    base dashboard theme
+app-core.js                  established dashboard behavior
+talkgroups.js                Talkgroup Manager layer
+ui-polish.css/js             lightweight UX/polish
+update.css/js                About-page software update controls
+update-progress.js           stage-driven update progress modal
+instrumentation.css/js       optional LIVE DMR gauges/traces/settings
+instrumentation-bootstrap.js initialization hook; no poll loop
+app.js                       tiny loader
 ```
 
-The UI uses same-origin external assets so the dashboard can retain a restrictive Content-Security-Policy without `unsafe-inline` styling.
+The enhanced LIVE DMR panel reuses the dashboard's existing status payload. It does not add a new daemon or a second server polling loop. When enhanced instrumentation is disabled, the established Basic LIVE DMR renderer remains in use.
 
-Visual effects are browser-side. They do not add a daemon, database, framework, or high-frequency backend polling loop.
+The UI uses same-origin external assets so the dashboard can retain a restrictive Content-Security-Policy without `unsafe-inline` styling.
 
 ## 🥧 Pi Zero performance budget
 
@@ -184,8 +221,9 @@ Prefer:
 - small long-running collectors
 - cached/event state over repeated expensive shelling
 - plain HTML/CSS/JS
-- CSS animation
+- CSS/SVG animation in the browser
 - bounded local files
+- explicit Basic/low-power modes
 
 Avoid turning a Pi Zero into infrastructure cosplay:
 
@@ -198,6 +236,6 @@ Avoid turning a Pi Zero into infrastructure cosplay:
 
 ## 📡 RF safety invariant
 
-Install, update, config-apply, and runtime-control paths must preserve explicit operator intent.
+Install, update, config-apply, runtime-control, display, and UI paths must preserve explicit operator intent.
 
-A UI change, Git pull, dashboard restart, or software update is **never** permission to unexpectedly start a transmitter.
+A UI change, OLED restart, Git pull, dashboard restart, or software update is **never** permission to unexpectedly start a transmitter.
