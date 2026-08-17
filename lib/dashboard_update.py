@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from urllib.parse import urlparse
 
 import dashboard_core as core
 
 STATUS = core.VAR / "update-status.json"
 PUBLIC_KEYS = {
-    "state", "phase", "installed_version", "current_commit", "target_version",
+    "state", "phase", "progress", "message",
+    "installed_version", "current_commit", "target_version",
     "target_commit", "target_date", "channel", "available", "up_to_date",
     "validated", "started_at", "completed_at", "updated_at", "backup", "error",
 }
@@ -20,12 +20,19 @@ def public_status():
     try:
         doc = json.loads(STATUS.read_text())
     except Exception:
-        doc = {"state": "idle", "phase": "idle"}
+        doc = {"state": "idle", "phase": "idle", "progress": 0}
     if not isinstance(doc, dict):
-        doc = {"state": "idle", "phase": "idle"}
+        doc = {"state": "idle", "phase": "idle", "progress": 0}
     out = {k: doc.get(k) for k in PUBLIC_KEYS if k in doc}
     out.setdefault("state", "idle")
     out.setdefault("phase", "idle")
+    out.setdefault("progress", 0)
+    try:
+        out["progress"] = max(0, min(100, int(out.get("progress") or 0)))
+    except Exception:
+        out["progress"] = 0
+    if out.get("message"):
+        out["message"] = str(out["message"])[:300]
     if out.get("error"):
         out["error"] = str(out["error"])[-1200:]
     return out
@@ -37,6 +44,9 @@ def wrap_handler(base):
             path = urlparse(self.path).path
             if path == "/update.js":
                 self.serve_static("update.js", "application/javascript; charset=utf-8")
+                return
+            if path == "/update-progress.js":
+                self.serve_static("update-progress.js", "application/javascript; charset=utf-8")
                 return
             if path == "/update.css":
                 self.serve_static("update.css", "text/css; charset=utf-8")
