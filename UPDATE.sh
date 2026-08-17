@@ -9,8 +9,8 @@ if declare -F ywd_banner >/dev/null; then
   ywd_info "MMDVM-Host / DMRGateway are not recompiled by normal app updates."
 fi
 
-# Nested console/update/display helpers are installed after the core updater
-# returns, so validate them before any live service/config work begins.
+# Nested console/update/display/plugin helpers are validated before any live
+# service/config work begins.
 if [[ -d "$SELF/lib/console" ]]; then
   python3 -m py_compile "$SELF/lib/console/ywd-system-info.py"
   for f in ywd-info-wrapper.sh ywd-logs.sh ywd-env.sh ywd-prompt.sh ywd-motd.sh; do
@@ -19,7 +19,7 @@ if [[ -d "$SELF/lib/console" ]]; then
 fi
 for f in \
   lib/update_runner.py lib/update_admin.py lib/dashboard_update.py lib/oled.py lib/oled_owner.sh \
-  lib/plugin_manager.py lib/plugin_service_manager.py lib/plugin_admin.py lib/dashboard_plugins.py \
+  lib/plugin_manager.py lib/plugin_service_manager.py lib/plugin_admin.py lib/dashboard_plugins.py lib/plugin_update_safety.py \
   lib/service_plugin_packages/service-heartbeat/plugin.json \
   lib/service_plugin_packages/service-heartbeat/config.schema.json \
   lib/service_plugin_packages/service-heartbeat/service.py \
@@ -32,7 +32,7 @@ done
 python3 -m py_compile \
   "$SELF/lib/update_runner.py" "$SELF/lib/update_admin.py" "$SELF/lib/dashboard_update.py" "$SELF/lib/oled.py" \
   "$SELF/lib/plugin_manager.py" "$SELF/lib/plugin_service_manager.py" "$SELF/lib/plugin_admin.py" "$SELF/lib/dashboard_plugins.py" \
-  "$SELF/lib/service_plugin_packages/service-heartbeat/service.py"
+  "$SELF/lib/plugin_update_safety.py" "$SELF/lib/service_plugin_packages/service-heartbeat/service.py"
 bash -n "$SELF/lib/oled_owner.sh"
 [[ -f "$SELF/lib/system_branding.sh" ]] && bash -n "$SELF/lib/system_branding.sh"
 
@@ -58,6 +58,18 @@ CORE="$SELF/UPDATE-core.sh"
 [[ -f "$CORE" ]] || CORE="/opt/ywd-hotspot/repo/UPDATE-core.sh"
 [[ -f "$CORE" ]] || { echo "[FAIL] Updater core not found." >&2; exit 1; }
 
+# Capture plugin intent + exact service boot/runtime state before replacing the
+# application. State/config files are not changed here; services are simply made
+# inert for the duration of the core update.
+PLUGIN_UPDATE_SNAPSHOT="$(mktemp /run/ywd-hotspot-plugin-update.XXXXXX.json)"
+cleanup_plugin_snapshot(){ sudo rm -f "$PLUGIN_UPDATE_SNAPSHOT" 2>/dev/null || true; }
+trap cleanup_plugin_snapshot EXIT
+sudo python3 "$SELF/lib/plugin_update_safety.py" capture \
+  --snapshot "$PLUGIN_UPDATE_SNAPSHOT" --lib /opt/ywd-hotspot/app/lib >/dev/null
+sudo python3 "$SELF/lib/plugin_update_safety.py" quiesce \
+  --snapshot "$PLUGIN_UPDATE_SNAPSHOT" --lib /opt/ywd-hotspot/app/lib >/dev/null
+echo "Plugin services quiesced for application update."
+
 # YWD-Hotspot OS already has one authoritative OLED owner. Ensure the legacy
 # app unit is off before the core updater captures service state so it cannot be
 # restarted alongside ywd-headless-oled during this transition.
@@ -65,11 +77,32 @@ if sudo systemctl cat ywd-headless-oled.service >/dev/null 2>&1; then
   sudo systemctl disable --now ywd-oled.service >/dev/null 2>&1 || true
 fi
 
+# Preserve the proven core updater/rollback engine. If it fails, it restores the
+# old app/config first; this wrapper then restores the captured plugin runtime
+# against that restored old application.
+set +e
 if declare -F ywd_run_colored >/dev/null; then
   ywd_run_colored bash "$CORE" "$@"
+  core_rc=$?
 else
   bash "$CORE" "$@"
+  core_rc=$?
 fi
+set -e
+if (( core_rc != 0 )); then
+  echo "Restoring pre-update plugin runtime after core rollback..."
+  sudo python3 "$SELF/lib/plugin_update_safety.py" restore \
+    --snapshot "$PLUGIN_UPDATE_SNAPSHOT" --lib /opt/ywd-hotspot/app/lib || \
+    echo "[WARN] Plugin runtime restore after rollback needs manual review."
+  exit "$core_rc"
+fi
+
+# The new runtime and generic plugin unit are now installed. Reconcile against
+# the target catalogs: only previously enabled plugins that still validate are
+# eligible for restoration, and exact service boot/runtime state is preserved.
+echo "Reconciling plugin runtime with updated application..."
+sudo python3 "$SELF/lib/plugin_update_safety.py" restore \
+  --snapshot "$PLUGIN_UPDATE_SNAPSHOT" --lib /opt/ywd-hotspot/app/lib
 
 # Persist first-party update channels from the invoking GitHub updater. This is
 # intentionally done by the incoming candidate so an older main/dev-only updater
