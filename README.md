@@ -4,11 +4,12 @@
 
 <h1 align="center">YWD-Hotspot</h1>
 <p align="center"><strong>Lightweight DMR hotspot software for Raspberry Pi + MMDVM HAT hardware.</strong></p>
-<p align="center">📡 DMR · 🎛️ BrandMeister · 🥧 Pi Zero W · 🧪 Calibration · 🔄 Safe GitHub updates</p>
+<p align="center">📡 DMR · 🎛️ BrandMeister · 🥧 Pi Zero W · 📟 OLED · 🧪 Calibration · 🔄 Safe GitHub updates</p>
 
 <p align="center">
   <a href="#-quick-install">🚀 Install</a> ·
   <a href="#-updating">🔄 Update</a> ·
+  <a href="#-live-dmr--display">📟 Display</a> ·
   <a href="#-talkgroup-manager">📻 Talkgroups</a> ·
   <a href="#-calibration">🧪 Calibration</a> ·
   <a href="docs/README.md">📚 Docs</a> ·
@@ -18,7 +19,7 @@
 ---
 
 > [!IMPORTANT]
-> **Development status:** `0.1.0-alpha10-dev` is the active `dev` build. `0.1.0-alpha9.2-dev` was user-tested successfully and is preserved at `dev-alpha9.2-known-good`. `main` remains the promoted line and is intentionally more conservative than `dev`.
+> **Development status:** `0.1.0-alpha12-dev` is the active `dev` build. `main` remains the promoted/conservative line. Alpha12 adds optional LIVE DMR instrumentation and a unified OLED runtime renderer while keeping Basic display modes as the low-overhead defaults.
 
 > [!WARNING]
 > The built-in WebUI is plain HTTP for a trusted LAN. Do **not** forward the dashboard port directly to the public Internet.
@@ -33,12 +34,12 @@ The design goal is simple: **make a DMR hotspot feel like a polished appliance w
 |---|---|
 | 📡 RF | DMR-only simplex configuration, live RX/TX state, Last Heard, BER/RSSI context |
 | 🎛️ BrandMeister | Static/dynamic TG controls, Drop QSO, Talkgroup Manager, directory search |
-| 🌐 WebUI | Responsive dark UI, authenticated write controls, themed modals/toasts |
+| 🌐 WebUI | Responsive dark UI, authenticated write controls, optional configurable RF-style instrumentation |
 | 🧪 Calibration | Baseline save/restore, repeated BER samples, RXOffset recommendation, export |
 | 🩺 Health | Service state, Wi-Fi/power/temperature checks, persistent journal, diagnostics |
-| 📟 OLED | Optional lightweight I2C status/activity display |
+| 📟 OLED | Unified lightweight runtime/boot display with configurable RX/TX presentation |
 | 💻 CLI | Colorized control console, status/source/calibration helpers |
-| 🔄 Updates | Managed Git checkout, staging, validation, backups, rollback attempt, channels |
+| 🔄 Updates | Managed Git checkout, staged validation, About-page updater, stage-driven progress, rollback attempt |
 
 No Node.js runtime. No React/Vue. No SQL server. No Redis. No Docker.
 
@@ -111,15 +112,7 @@ cd ywd-hotspot
 sudo ./MIGRATE-TO-GITHUB.sh
 ```
 
-Migration preserves:
-
-- canonical config
-- BrandMeister credentials
-- local WebUI control password
-- calibration/history/runtime data
-- current RF running/enabled policy
-
-It does **not** rebuild MMDVM-Host or DMRGateway.
+Migration preserves canonical config, BrandMeister credentials, local WebUI control password, calibration/history/runtime data, and current RF running/enabled policy. It does **not** rebuild MMDVM-Host or DMRGateway.
 
 After migration, cross onto `dev` only if you want the active test line:
 
@@ -167,7 +160,7 @@ YWD-Hotspot separates managed source from the live runtime:
 /opt/ywd-hotspot/app     deployed runtime copy; no .git directory
 ```
 
-Normal update flow:
+Normal CLI update flow:
 
 ```bash
 sudo ywd-hotspotctl update --check
@@ -182,9 +175,55 @@ sudo ywd-hotspotctl update-channel main
 sudo ywd-hotspotctl update-channel dev
 ```
 
-The updater fetches and validates while the current hotspot keeps running, then applies only after explicit confirmation. It preserves the RF active/enabled policy and keeps a protected pre-update backup.
+GitHub-managed installs also expose **ABOUT → SOFTWARE UPDATE** when WebUI controls are unlocked. The WebUI updater validates the saved channel, starts a detached one-shot update job, and shows real stage-driven progress while the dashboard restarts/reconnects.
+
+The updater preserves RF active/enabled policy and keeps a protected pre-update backup. Browser code cannot supply arbitrary root shell commands or update URLs/branches.
 
 Full details and recovery notes: **[docs/UPGRADING.md](docs/UPGRADING.md)**
+
+## 📟 LIVE DMR + Display
+
+Alpha12 adds an optional RF-instrument style Status panel while preserving the established Basic UI.
+
+### WebUI LIVE DMR modes
+
+**Basic** keeps the current lightweight RX/TX activity card and is the default.
+
+Enhanced instrumentation can add:
+
+- segmented or smooth RSSI meter
+- BER quality meter with configurable thresholds
+- configured TX/RF drive meters
+- peak hold
+- rolling RSSI and BER traces
+- animated RF-energy visualization
+- live top-strip RX/TX information
+- 5/10/20 fps performance targets
+- reduced-motion controls
+- Basic, Balanced, Instrument, Maximum Shiny, and Custom presets
+
+The gauges consume the dashboard's existing status payload; enhanced mode does not create another server polling loop. Missing RSSI/BER stays missing rather than being fabricated. The animated RF-energy display is presentation, not an audio VU meter.
+
+### Unified OLED
+
+On YWD-Hotspot OS, `ywd-headless-oled.service` remains the **sole SSD1306/I2C owner**. It uses the unified renderer for boot/network/setup screens and, after setup, configurable runtime RX/TX pages. The duplicate `ywd-oled.service` remains disabled on the appliance OS.
+
+Runtime OLED options include:
+
+- Basic / Enhanced / Minimal modes
+- large auto-fit callsign
+- group/private destination and cached TG names
+- local DMR-ID callsign resolution
+- slot, elapsed, BER, RSSI, and packet-loss toggles
+- post-call hold
+- optional idle page cycling
+- brightness/timeout
+- hardware 0° / 180° rotation
+- software-update progress display
+
+Display services remain passive consumers outside the RF-critical path. OLED failure must not stop DMR.
+
+Full guide: **[docs/DISPLAY.md](docs/DISPLAY.md)**
 
 ## 📻 Talkgroup Manager
 
@@ -237,11 +276,12 @@ BrandMeister
 Side services:
   ├─ activity collector
   ├─ dashboard / API
-  ├─ OLED
+  ├─ authoritative OLED renderer
+  ├─ detached software updater
   └─ RadioID updater
 ```
 
-The dashboard/OLED/activity presentation stay outside the RF-critical path. If the WebUI dies, DMR should keep working.
+The dashboard/OLED/activity presentation stay outside the RF-critical path. If the WebUI or OLED dies, DMR should keep working.
 
 Architecture notes: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**
 
@@ -268,7 +308,7 @@ Install/update writes non-secret provenance to:
 The CLI and About page show:
 
 ```text
-Version         0.1.0-alpha10-dev
+Version         0.1.0-alpha12-dev
 Git branch      dev
 Update channel  dev
 Git commit      <commit SHA>
@@ -343,7 +383,8 @@ Do not casually move these pins during calibration/stability work.
 |---|---|
 | **[Documentation index](docs/README.md)** | Find the right guide quickly |
 | **[Installation](docs/INSTALL.md)** | Fresh install, migration, UART/modem preflight |
-| **[Upgrading](docs/UPGRADING.md)** | Channels, staged updates, rollback/recovery |
+| **[Upgrading](docs/UPGRADING.md)** | Channels, staged/WebUI updates, rollback/recovery |
+| **[Display + Instrumentation](docs/DISPLAY.md)** | LIVE DMR meters, Basic/Enhanced modes, unified OLED settings |
 | **[Talkgroups](docs/TALKGROUPS.md)** | BrandMeister Talkgroup Manager |
 | **[Calibration](docs/CALIBRATION.md)** | Controlled RX BER workflow |
 | **[Architecture](docs/ARCHITECTURE.md)** | RF path, privilege boundaries, runtime layout |
