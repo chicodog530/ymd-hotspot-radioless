@@ -11,6 +11,14 @@ import config_model
 CFG = Path(os.environ.get("YWD_CONFIG", "/etc/ywd-hotspot/config.json"))
 OUT = Path(os.environ.get("YWD_CONFIG_DIR", "/etc/ywd-hotspot"))
 DMRIDS = Path(os.environ.get("YWD_DMRID_FILE", "/var/lib/ywd-hotspot/DMRIds.dat"))
+RSSI_MAP = Path(os.environ.get("YWD_RSSI_MAPPING_FILE", str(OUT / "mmdvm-hs-rssi.dat")))
+
+RSSI_MAPPING_TEXT = """# YWD-Hotspot MMDVM_HS RSSI mapping
+# MMDVM_HS ADF7021 firmware with SEND_RSSI_DATA reports the positive
+# magnitude of received dBm. Map that value directly to negative dBm.
+0 0
+255 -255
+"""
 
 
 def clean(v):
@@ -92,6 +100,7 @@ RXDCOffset=0
 TXDCOffset=0
 RFLevel={int(r.get('rf_level',100))}
 DMRTXLevel={int(r.get('tx_level',50))}
+RSSIMappingFile={RSSI_MAP}
 UseCOSAsLockout=0
 Trace=0
 Debug=0
@@ -258,11 +267,14 @@ def main():
     c = config_model.normalize(raw)
     mmdvm, dmrgw, location_data = render(c)
     OUT.mkdir(parents=True, exist_ok=True)
+    RSSI_MAP.parent.mkdir(parents=True, exist_ok=True)
+    write_secure(RSSI_MAP, RSSI_MAPPING_TEXT)
     write_secure(OUT / "MMDVM-Host.ini", mmdvm)
     write_secure(OUT / "DMRGateway.ini", dmrgw)
     print("Generated:")
     print(f"  {OUT / 'MMDVM-Host.ini'}")
     print(f"  {OUT / 'DMRGateway.ini'}")
+    print(f"  {RSSI_MAP}")
     if location_data == 0:
         print("  BrandMeister location data disabled because coordinates are 0,0.")
 

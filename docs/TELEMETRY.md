@@ -2,7 +2,7 @@
 
 [Documentation index](README.md) · [Plugin framework](PLUGINS.md) · [Display + instrumentation](DISPLAY.md) · [Architecture](ARCHITECTURE.md)
 
-The Alpha17 `dev-plugins` line adds a passive MMDVM telemetry path for first-party plugins. Its first consumer is the **MMDVM Live Telemetry** package.
+The Alpha17 `dev-plugins` line adds a passive MMDVM telemetry path for first-party plugins. Its first consumer is the **MMDVM Live Telemetry** package. Alpha17.1 adds the proven MMDVM_HS RSSI normalization needed for real receive-signal values on supported ADF7021 hotspot firmware.
 
 This layer is intentionally separate from RF ownership. A telemetry plugin may observe validated MMDVM state, but it does not own the modem serial port, change RF mode, transmit, or receive arbitrary network access.
 
@@ -43,6 +43,13 @@ Keepalive=60
 Name=ywd-mmdvm
 ```
 
+Alpha17.1 also generates the MMDVM_HS RSSI mapping path in the modem section:
+
+```ini
+[Modem]
+RSSIMappingFile=/etc/ywd-hotspot/mmdvm-hs-rssi.dat
+```
+
 The pinned MMDVM-Host publishes structured JSON to the `json` topic beneath its configured name, so the YWD bridge subscribes to:
 
 ```text
@@ -50,6 +57,24 @@ ywd-mmdvm/json
 ```
 
 The existing `MQTTLevel=0` log setting remains unchanged; telemetry uses MMDVM-Host's structured JSON publisher rather than turning on verbose MQTT logging.
+
+## MMDVM_HS RSSI normalization
+
+Supported MMDVM_HS ADF7021 firmware with `SEND_RSSI_DATA` reports the **positive magnitude** of received dBm in the extra RSSI bytes appended to RF frames. For example, a firmware value of `62` represents approximately `-62 dBm`.
+
+YWD therefore generates this normalization file:
+
+```text
+# YWD-Hotspot MMDVM_HS RSSI mapping
+0 0
+255 -255
+```
+
+MMDVM-Host linearly interpolates that mapping, so `57 → -57 dBm`, `62 → -62 dBm`, and so on. This is not a guessed RF calibration curve and it does not manufacture RSSI when firmware does not supply RSSI bytes. A firmware build without `SEND_RSSI_DATA` will continue to report RSSI as unavailable.
+
+The generated map lives at `/etc/ywd-hotspot/mmdvm-hs-rssi.dat`, is regenerated with the upstream INI files, and is readable by the unprivileged `ywd-hotspot` MMDVM-Host service account.
+
+Physical validation on the reference hotspot produced raw/report pairs such as `62/-62 dBm` and `57/-57 dBm`, with an RF call summary of `-66/-47/-57 dBm` (minimum/maximum/average). This confirmed the normalization contract without changing modem firmware or RF calibration.
 
 ## Broker boundary
 
@@ -225,6 +250,11 @@ sudo ss -ltnp | grep 18883 || true
 echo
 echo '===== SNAPSHOT ====='
 sudo python3 -m json.tool /run/ywd-hotspot-telemetry/telemetry.json 2>/dev/null || true
+
+echo
+echo '===== RSSI MAPPING ====='
+grep -n 'RSSIMappingFile' /etc/ywd-hotspot/MMDVM-Host.ini || true
+cat /etc/ywd-hotspot/mmdvm-hs-rssi.dat 2>/dev/null || true
 
 echo
 echo '===== CORE DMR ====='
