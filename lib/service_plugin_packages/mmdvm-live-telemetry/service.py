@@ -32,6 +32,15 @@ def snapshot():
         return {}
 
 
+def session_text(session):
+    if not isinstance(session, dict):
+        return ''
+    src = session.get('src_info') or session.get('src_id') or 'unknown'
+    dst = session.get('dst_id')
+    prefix = 'TG ' if session.get('group') is True else ''
+    return f" id={session.get('session_id')} src={src} dst={prefix}{dst} slot={session.get('slot')} direction={session.get('direction')} state={session.get('state')}"
+
+
 def stop(_signum, _frame): STOP.set()
 
 
@@ -43,13 +52,14 @@ def main():
         raw = snapshot(); bridge = raw.get('bridge') if isinstance(raw.get('bridge'), dict) else {}
         rssi = raw.get('rssi') if isinstance(raw.get('rssi'), dict) else {}
         ber = raw.get('ber') if isinstance(raw.get('ber'), dict) else {}
-        dmr = raw.get('dmr') if isinstance(raw.get('dmr'), dict) else {}
-        active = dmr.get('active') if isinstance(dmr.get('active'), dict) else {}
-        call = ''
-        if active:
-            dst = active.get('dst_id'); prefix = 'TG ' if str(active.get('group','')).lower() == 'yes' else ''
-            call = f" src={active.get('src_info') or active.get('src_id')} dst={prefix}{dst} slot={active.get('slot')} source={active.get('source')}"
-        print(f"YWD telemetry: bridge={bridge.get('status','offline')} messages={bridge.get('messages',0)} RSSI={rssi.get('value','—')} BER={ber.get('value','—')}{call}", flush=True)
+        sessions = raw.get('sessions') if isinstance(raw.get('sessions'), dict) else {}
+        active_list = sessions.get('active') if isinstance(sessions.get('active'), list) else []
+        active = active_list[0] if active_list and isinstance(active_list[0], dict) else None
+        last = sessions.get('last') if isinstance(sessions.get('last'), dict) else None
+        detail = session_text(active)
+        if not detail and last:
+            detail = ' last' + session_text(last)
+        print(f"YWD telemetry: bridge={bridge.get('status','offline')} messages={bridge.get('messages',0)} RSSI={rssi.get('value','—')} BER={ber.get('value','—')}{detail}", flush=True)
         STOP.wait(interval)
     print('YWD mmdvm-live-telemetry adapter stopping cleanly', flush=True)
 

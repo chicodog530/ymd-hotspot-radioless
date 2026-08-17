@@ -12,6 +12,8 @@ import threading
 import time
 from pathlib import Path
 
+import mmdvm_session
+
 STATE = Path(os.environ.get("YWD_MMDVM_TELEMETRY", "/run/ywd-hotspot-telemetry/telemetry.json"))
 HOST = os.environ.get("YWD_MQTT_HOST", "127.0.0.1")
 PORT = int(os.environ.get("YWD_MQTT_PORT", "18883"))
@@ -56,7 +58,7 @@ def clean_map(raw, keys):
 
 def initial_state():
     now = time.time()
-    return {"schema":1,"bridge":{"status":"starting","heartbeat_at":now,"started_at":now,"messages":0,"parse_errors":0,"topic":TOPIC},"mmdvm":{},"rssi":{},"ber":{},"text":{},"dmr":{"active":None,"last":None},"last_payload_at":None}
+    return {"schema":1,"bridge":{"status":"starting","heartbeat_at":now,"started_at":now,"messages":0,"parse_errors":0,"topic":TOPIC},"mmdvm":{},"rssi":{},"ber":{},"text":{},"dmr":{"active":None,"last":None},"sessions":mmdvm_session.initial_sessions(),"last_payload_at":None}
 
 
 def handle_payload(doc, payload):
@@ -91,6 +93,7 @@ def handle_payload(doc, payload):
         elif action in {"end","lost","timeout","rejected","invalid"}:
             active = doc["dmr"].get("active")
             if not isinstance(active, dict) or active.get("slot") == item.get("slot"): doc["dmr"]["active"] = None
+        doc["sessions"] = mmdvm_session.observe(doc.get("sessions"), item)
     else:
         return
     doc["bridge"]["messages"] += 1

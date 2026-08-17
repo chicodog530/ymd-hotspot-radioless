@@ -7,6 +7,8 @@ import os
 import time
 from pathlib import Path
 
+import mmdvm_session
+
 SNAPSHOT = Path(os.environ.get("YWD_MMDVM_TELEMETRY", "/run/ywd-hotspot-telemetry/telemetry.json"))
 
 
@@ -53,6 +55,21 @@ def public_snapshot(stale_after=8):
     ber = sample("ber")
     mode = str(mmdvm.get("mode") or rssi.get("mode") or ber.get("mode") or "idle")[:20]
 
+    session_state = raw.get("sessions") if isinstance(raw.get("sessions"), dict) else {}
+    active_sessions = [
+        item for item in (
+            mmdvm_session.public_session(entry, now)
+            for entry in (session_state.get("active") if isinstance(session_state.get("active"), list) else [])
+        ) if item is not None
+    ]
+    last_session = mmdvm_session.public_session(session_state.get("last"), now)
+    recent_sessions = [
+        item for item in (
+            mmdvm_session.public_session(entry, now)
+            for entry in (session_state.get("recent") if isinstance(session_state.get("recent"), list) else [])[:mmdvm_session.MAX_RECENT]
+        ) if item is not None
+    ]
+
     return {
         "bridge": {
             "status": status,
@@ -67,5 +84,13 @@ def public_snapshot(stale_after=8):
         "ber": ber,
         "active_call": active,
         "last_event": last,
+        "active_session": active_sessions[0] if active_sessions else None,
+        "last_session": last_session,
+        "sessions": {
+            "schema": 1,
+            "active": active_sessions,
+            "last": last_session,
+            "recent": recent_sessions,
+        },
         "last_payload_age_s": _age(now, raw.get("last_payload_at")),
     }

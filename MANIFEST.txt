@@ -29,6 +29,7 @@ docs/CALIBRATION.md
 docs/DISPLAY.md
 docs/GITHUB-SETUP.md
 docs/INSTALL.md
+docs/MMDVM-SESSIONS.md
 docs/PLUGINS.md
 docs/TALKGROUPS.md
 docs/TELEMETRY.md
@@ -57,6 +58,7 @@ lib/generate-config.py
 lib/health.py
 lib/id-update.py
 lib/migrate.py
+lib/mmdvm_session.py
 lib/mmdvm_telemetry.py
 lib/mmdvm_telemetry_bridge.py
 lib/oled.py
