@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """Root-owned detached updater used by the YWD-Hotspot WebUI.
 
-The dashboard never executes git/update commands directly.  It asks the narrow
-admin helper to start ywd-update.service; this runner then performs the existing
+The dashboard never executes git/update commands directly. It asks the narrow
+admin helper to start ywd-update.service; this runner performs the existing
 validated GitHub update independently of the dashboard process and publishes a
 small sanitized status document for reconnect/polling.
+
+Progress is deliberately stage-based rather than time-based. Percentages only
+advance after observable updater milestones are reached, so the UI never lies
+with a cosmetic timer.
 """
 from __future__ import annotations
 
@@ -14,7 +18,6 @@ import os
 import re
 import subprocess
 import sys
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -69,6 +72,14 @@ def write_status(**fields):
     return doc
 
 
+def progress(percent, phase, message, **fields):
+    value = max(0, min(100, int(percent)))
+    return write_status(
+        state="running", progress=value, phase=phase, message=message,
+        error=None, **fields,
+    )
+
+
 def run(args, timeout=30, input_text=None):
     return subprocess.run(args, text=True, input=input_text, stdout=subprocess.PIPE,
                           stderr=subprocess.STDOUT, timeout=timeout, check=False)
@@ -103,7 +114,7 @@ def ensure_source():
     dirty = git("status", "--porcelain")
     if dirty:
         raise RuntimeError("managed Git checkout has local modifications")
-    # Older OS images were cloned --single-branch dev-os.  Widen the refspec so
+    # Older OS images were cloned --single-branch dev-os. Widen the refspec so
     # a saved main/dev application channel is always fetchable.
     p = run(["git", "-C", str(REPO), "config", "--replace-all", "remote.origin.fetch",
              "+refs/heads/*:refs/remotes/origin/*"], timeout=10)
@@ -145,10 +156,14 @@ def parse_check(output):
     return data
 
 
-def check_candidate(write=True):
+def check_candidate(write=True, live_progress=False):
+    if live_progress:
+        progress(8, "source", "Checking managed Git source and update channel…")
     ensure_source()
     if not UPDATER.is_file():
         raise RuntimeError("GitHub updater is missing")
+    if live_progress:
+        progress(18, "fetching", "Fetching and validating the candidate from GitHub…")
     p = run(["bash", str(UPDATER), "--dry-run"], timeout=180)
     info = parse_check(p.stdout)
     if p.returncode != 0:
@@ -156,38 +171,87 @@ def check_candidate(write=True):
         raise RuntimeError((msg[-1] if msg else "update candidate check failed")[:800])
     if not info["validated"]:
         raise RuntimeError("update candidate did not pass validation")
+    if live_progress:
+        progress(35, "validated", "Candidate validation passed. Preparing live update…", **info)
     if write:
-        write_status(state="checked", phase="ready", error=None, started_at=None,
+        write_status(state="checked", phase="ready", progress=0,
+                     message="Candidate check complete.", error=None, started_at=None,
                      completed_at=None, **info)
     return info
 
 
+def stream_update(info):
+    """Run the canonical updater and translate real output milestones to progress."""
+    proc = subprocess.Popen(
+        ["bash", str(UPDATER)], text=True,
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        bufsize=1,
+    )
+    if proc.stdin:
+        proc.stdin.write("y\n")
+        proc.stdin.flush()
+        proc.stdin.close()
+
+    lines = []
+    milestones = [
+        ("Fetching YWD-Hotspot from GitHub", 42, "fetching", "Refreshing GitHub source…"),
+        ("Candidate validation: OK", 52, "validated", "Live candidate re-validation passed."),
+        ("Applying validated candidate", 58, "starting", "Starting protected application update…"),
+        ("Protected pre-update backup:", 66, "backup", "Protected rollback backup created."),
+        ("Installing ", 74, "installing", "Installing updated YWD-Hotspot runtime files…"),
+        ("Persistent journal:", 84, "services", "Runtime files installed. Restoring service policy…"),
+        ("Updated to ", 91, "restarting", "Application updated. Restarting and verifying services…"),
+        ("GitHub source checkout updated successfully", 97, "finalizing", "Finalizing GitHub source state…"),
+    ]
+    seen = set()
+    if proc.stdout:
+        for raw in proc.stdout:
+            line = clean(raw.rstrip("\n"))
+            lines.append(line)
+            if len(lines) > 400:
+                lines = lines[-400:]
+            for marker, pct, phase, message in milestones:
+                key = (marker, pct)
+                if key not in seen and marker in line:
+                    seen.add(key)
+                    progress(pct, phase, message, **info)
+                    break
+    rc = proc.wait()
+    return rc, "\n".join(lines)
+
+
 def install_update():
     try:
-        info = check_candidate(write=False)
+        write_status(state="running", phase="starting", progress=3,
+                     message="Update job started.", error=None,
+                     started_at=now_iso(), completed_at=None)
+        info = check_candidate(write=False, live_progress=True)
         if info.get("up_to_date") or not info.get("available"):
-            write_status(state="complete", phase="up-to-date", error=None,
+            write_status(state="complete", phase="up-to-date", progress=100,
+                         message="This hotspot is already up to date.", error=None,
                          completed_at=now_iso(), **info)
             return 0
-        write_status(state="running", phase="installing", error=None,
-                     started_at=now_iso(), completed_at=None, **info)
-        # The existing updater has one explicit confirmation prompt.  Feeding a
-        # single 'y' keeps all staging/validation/rollback logic in one canonical
-        # updater instead of duplicating it here.
-        p = run(["bash", str(UPDATER)], timeout=1200, input_text="y\n")
-        text = clean(p.stdout)
+
+        progress(38, "queued", "Launching validated update workflow…", **info)
+        rc, output = stream_update(info)
+        text = clean(output)
         tail = "\n".join(text.strip().splitlines()[-24:])[-5000:]
-        if p.returncode != 0:
-            write_status(state="failed", phase="failed", error=(tail or "update failed")[-1200:],
-                         completed_at=now_iso(), output_tail=tail, **info)
-            return p.returncode or 1
+        if rc != 0:
+            write_status(state="failed", phase="failed", progress=100,
+                         message="Update failed; rollback handling has completed or is in progress.",
+                         error=(tail or "update failed")[-1200:], completed_at=now_iso(),
+                         output_tail=tail, **info)
+            return rc or 1
+
         built = read_json(BUILD, {})
         backup = None
         m = re.findall(r"Backup retained:\s*(\S+)", text)
         if m:
             backup = m[-1]
         write_status(
-            state="complete", phase="complete", error=None, completed_at=now_iso(),
+            state="complete", phase="complete", progress=100,
+            message="Update complete. The new dashboard is ready.",
+            error=None, completed_at=now_iso(),
             installed_version=built.get("version") or info.get("target_version"),
             current_commit=built.get("commit") or info.get("target_commit"),
             target_version=info.get("target_version"), target_commit=info.get("target_commit"),
@@ -196,7 +260,8 @@ def install_update():
         )
         return 0
     except Exception as exc:
-        write_status(state="failed", phase="failed", error=str(exc)[:1200], completed_at=now_iso())
+        write_status(state="failed", phase="failed", progress=100,
+                     message="Update failed.", error=str(exc)[:1200], completed_at=now_iso())
         return 1
 
 
@@ -208,7 +273,8 @@ def main():
         try:
             print(json.dumps({"ok": True, **check_candidate(write=True)}, separators=(",", ":")))
         except Exception as exc:
-            write_status(state="failed", phase="check-failed", error=str(exc)[:1200], completed_at=now_iso())
+            write_status(state="failed", phase="check-failed", progress=0,
+                         message="Update check failed.", error=str(exc)[:1200], completed_at=now_iso())
             print(json.dumps({"ok": False, "error": str(exc)[:800]}, separators=(",", ":")))
             raise SystemExit(1)
         return
