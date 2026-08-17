@@ -1,0 +1,15 @@
+[Unit]
+Description=YWD-Hotspot detached software update
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/ywd-update-runner install
+User=root
+Group=root
+TimeoutStartSec=20min
+Nice=5
+
+# This unit is started explicitly by the authenticated dashboard admin helper.
+# It is intentionally not enabled at boot.
