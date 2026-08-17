@@ -3,6 +3,22 @@ set -euo pipefail
 SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [[ -r "$SELF/bin/ywd-ui.sh" ]] && source "$SELF/bin/ywd-ui.sh"
 VERSION="$(cat "$SELF/VERSION" 2>/dev/null || cat /opt/ywd-hotspot/app/VERSION 2>/dev/null || echo unknown)"
+if [[ $EUID -ne 0 ]]; then exec sudo "$0" "$@"; fi
+
+# Early OS images cloned only dev-os with --single-branch. Once an appliance is
+# adopted onto the normal app channel, widen only a verified canonical checkout
+# so main/dev/dev-os can all be fetched. The core updater still performs its own
+# origin/clean-tree checks before changing the live application.
+REPO_DIR=/opt/ywd-hotspot/repo
+if [[ -d "$REPO_DIR/.git" ]]; then
+  origin="$(git -C "$REPO_DIR" remote get-url origin 2>/dev/null || true)"
+  case "$origin" in
+    https://github.com/merberg-ai/ywd-hotspot.git|https://github.com/merberg-ai/ywd-hotspot|git@github.com:merberg-ai/ywd-hotspot.git)
+      git -C "$REPO_DIR" config --replace-all remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
+      ;;
+  esac
+fi
+
 if declare -F ywd_banner >/dev/null; then
   ywd_banner "GITHUB UPDATE" "$VERSION"
   ywd_info "Fetch + validation happen before the live RF stack is touched."
