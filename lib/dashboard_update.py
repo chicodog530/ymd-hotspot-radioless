@@ -6,6 +6,7 @@ import json
 from urllib.parse import urlparse
 
 import dashboard_core as core
+import dashboard_plugins
 
 STATUS = core.VAR / "update-status.json"
 PUBLIC_KEYS = {
@@ -79,4 +80,4 @@ def wrap_handler(base):
                 self.send_json({"error": str(exc)[:800]}, 502)
 
     UpdateHandler.__name__ = f"Update{base.__name__}"
-    return UpdateHandler
+    return dashboard_plugins.wrap_handler(UpdateHandler)
