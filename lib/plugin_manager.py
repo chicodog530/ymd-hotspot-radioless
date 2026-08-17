@@ -3,7 +3,7 @@
 
 Plugin API v1 intentionally does not import or execute plugin Python/JavaScript.
 Bundled first-party plugins are manifest + schema packages interpreted by this
-trusted core.  This establishes discovery/config/lifecycle UI safely before
+trusted core. This establishes discovery/config/lifecycle UI safely before
 service-backed or RF-mode plugins are permitted in a later API revision.
 """
 from __future__ import annotations
@@ -40,8 +40,7 @@ class PluginError(ValueError):
 
 def _read_json(path, default=None):
     try:
-        value = json.loads(Path(path).read_text(encoding="utf-8"))
-        return value
+        return json.loads(Path(path).read_text(encoding="utf-8"))
     except Exception:
         return default
 
@@ -117,7 +116,8 @@ def validate_schema(plugin_dir, filename):
         elif kind == "boolean":
             field["default"] = bool(item.get("default", False))
         elif kind == "integer":
-            minimum = int(item.get("min", -2147483648)); maximum = int(item.get("max", 2147483647))
+            minimum = int(item.get("min", -2147483648))
+            maximum = int(item.get("max", 2147483647))
             if minimum > maximum:
                 raise PluginError(f"invalid integer range for {key}")
             default = int(item.get("default", minimum if minimum > 0 else 0))
@@ -171,6 +171,9 @@ def validate_manifest(path):
     if not isinstance(caps, list) or any(str(x) not in ALLOWED_CAPABILITIES for x in caps):
         raise PluginError("manifest contains an unsupported capability")
     caps = list(dict.fromkeys(str(x) for x in caps))
+    rf_mode = bool(raw.get("rf_mode", False))
+    if rf_mode:
+        raise PluginError("RF-mode plugins are not permitted by Plugin API v1")
     service = raw.get("service")
     if service is not None:
         service = str(service)
@@ -180,10 +183,20 @@ def validate_manifest(path):
     schema_name = str(raw.get("config_schema") or "")
     schema = validate_schema(plugin_dir, schema_name)
     return {
-        "api": API_VERSION, "id": ident, "name": name, "version": version,
-        "description": description, "trust": trust, "kind": kind, "provider": provider,
-        "capabilities": caps, "rf_mode": bool(raw.get("rf_mode", False)), "service": None,
-        "config_schema": schema_name, "schema": schema, "directory": plugin_dir,
+        "api": API_VERSION,
+        "id": ident,
+        "name": name,
+        "version": version,
+        "description": description,
+        "trust": trust,
+        "kind": kind,
+        "provider": provider,
+        "capabilities": caps,
+        "rf_mode": rf_mode,
+        "service": None,
+        "config_schema": schema_name,
+        "schema": schema,
+        "directory": plugin_dir,
     }
 
 
@@ -199,7 +212,11 @@ def discover():
             found.append({"valid": True, "manifest": validate_manifest(manifest_path), "error": None})
         except Exception as exc:
             ident = directory.name if ID_RE.fullmatch(directory.name) else "invalid-package"
-            found.append({"valid": False, "manifest": {"id": ident, "name": directory.name, "version": "unknown", "directory": directory}, "error": str(exc)[:500]})
+            found.append({
+                "valid": False,
+                "manifest": {"id": ident, "name": directory.name, "version": "unknown", "directory": directory},
+                "error": str(exc)[:500],
+            })
     return found
 
 
@@ -227,7 +244,7 @@ def normalize_config(plugin, incoming=None):
         incoming = _read_json(config_path(plugin["id"]), {})
     if not isinstance(incoming, dict):
         raise PluginError("plugin configuration must be an object")
-    allowed = {f["key"] for f in schema["fields"]}
+    allowed = {field["key"] for field in schema["fields"]}
     unknown = set(incoming) - allowed
     if unknown:
         raise PluginError(f"unknown plugin configuration keys: {', '.join(sorted(unknown))}")
@@ -242,8 +259,10 @@ def normalize_config(plugin, incoming=None):
         elif kind == "integer":
             if isinstance(value, bool):
                 raise PluginError(f"{key} must be an integer")
-            try: value = int(value)
-            except Exception: raise PluginError(f"{key} must be an integer")
+            try:
+                value = int(value)
+            except Exception:
+                raise PluginError(f"{key} must be an integer")
             if not field["min"] <= value <= field["max"]:
                 raise PluginError(f"{key} must be between {field['min']} and {field['max']}")
         elif kind == "select":
@@ -274,9 +293,12 @@ def provider_data(plugin, config, system_summary=None):
         return {}
     system = system_summary if isinstance(system_summary, dict) else {}
     out = {"label": config.get("label", "Framework online"), "hostname": system.get("hostname")}
-    if config.get("show_uptime", True): out["uptime_s"] = system.get("uptime_s")
-    if config.get("show_temperature", True): out["temperature_c"] = system.get("temperature_c")
-    if config.get("show_load", False): out["load"] = system.get("load")
+    if config.get("show_uptime", True):
+        out["uptime_s"] = system.get("uptime_s")
+    if config.get("show_temperature", True):
+        out["temperature_c"] = system.get("temperature_c")
+    if config.get("show_load", False):
+        out["load"] = system.get("load")
     return out
 
 
@@ -289,13 +311,20 @@ def snapshot(system_summary=None):
         manifest = entry["manifest"]
         ident = manifest.get("id", "invalid-package")
         desired = bool((state.get("plugins", {}).get(ident) or {}).get("enabled", False))
-        if desired: enabled_count += 1
+        if desired:
+            enabled_count += 1
         effective = bool(state["enabled"] and desired and entry["valid"])
-        if effective: active += 1
+        if effective:
+            active += 1
         item = {
-            "id": ident, "name": manifest.get("name", ident), "version": manifest.get("version", "unknown"),
-            "valid": bool(entry["valid"]), "error": entry.get("error"), "enabled": desired,
-            "effective_enabled": effective, "health": "error" if not entry["valid"] else ("active" if effective else "disabled"),
+            "id": ident,
+            "name": manifest.get("name", ident),
+            "version": manifest.get("version", "unknown"),
+            "valid": bool(entry["valid"]),
+            "error": entry.get("error"),
+            "enabled": desired,
+            "effective_enabled": effective,
+            "health": "error" if not entry["valid"] else ("active" if effective else "disabled"),
         }
         if entry["valid"]:
             try:
@@ -306,20 +335,31 @@ def snapshot(system_summary=None):
                 config_error = str(exc)[:400]
                 item["health"] = "error"
             item.update({
-                "description": manifest["description"], "trust": manifest["trust"], "kind": manifest["kind"],
-                "provider": manifest["provider"], "capabilities": manifest["capabilities"], "rf_mode": manifest["rf_mode"],
-                "service": manifest["service"], "schema": manifest["schema"], "config": public_config(manifest, config),
+                "description": manifest["description"],
+                "trust": manifest["trust"],
+                "kind": manifest["kind"],
+                "provider": manifest["provider"],
+                "capabilities": manifest["capabilities"],
+                "rf_mode": manifest["rf_mode"],
+                "service": manifest["service"],
+                "schema": manifest["schema"],
+                "config": public_config(manifest, config),
                 "config_error": config_error,
             })
             if effective and not config_error:
                 item["data"] = provider_data(manifest, config, system_summary)
         packages.append(item)
-    health = "disabled" if not state["enabled"] else ("error" if any(x["health"] == "error" for x in packages) else "good")
+    health = "disabled" if not state["enabled"] else (
+        "error" if any(item["health"] == "error" for item in packages) else "good"
+    )
     return {
         "api": API_VERSION,
         "system": {
-            "enabled": state["enabled"], "health": health, "installed": len(packages),
-            "enabled_plugins": enabled_count, "active_plugins": active,
+            "enabled": state["enabled"],
+            "health": health,
+            "installed": len(packages),
+            "enabled_plugins": enabled_count,
+            "active_plugins": active,
             "execution_model": "declarative-only",
         },
         "plugins": packages,
@@ -327,7 +367,8 @@ def snapshot(system_summary=None):
 
 
 def test_plugin(ident, system_summary=None):
-    state = read_state(); plugin = get_plugin(ident)
+    state = read_state()
+    plugin = get_plugin(ident)
     desired = bool((state.get("plugins", {}).get(plugin["id"]) or {}).get("enabled", False))
     if not state["enabled"]:
         raise PluginError("plugin subsystem is disabled")
@@ -335,7 +376,9 @@ def test_plugin(ident, system_summary=None):
         raise PluginError("plugin is disabled")
     config = normalize_config(plugin)
     return {
-        "ok": True, "id": plugin["id"], "health": "pass",
+        "ok": True,
+        "id": plugin["id"],
+        "health": "pass",
         "message": "Declarative provider test passed; no plugin code was executed.",
         "data": provider_data(plugin, config, system_summary),
     }
