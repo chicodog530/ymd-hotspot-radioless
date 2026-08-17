@@ -6,6 +6,55 @@ YWD-Hotspot is still alpha software. These are project checkpoints, not a promis
 
 ---
 
+## 0.1.0-alpha15-dev — Plugin Update + Rollback Safety
+
+**Status:** `dev-plugins` test build layered on the physically proven Alpha14 service-plugin checkpoint. No MMDVM-Host, DMRGateway, RF config, OLED, or normal DMR-service changes are included.
+
+Highlights:
+
+- new trusted `plugin_update_safety.py` transaction helper
+- plugin-aware updates capture master state, per-plugin activation state, and exact service runtime/boot state
+- all YWD plugin services are quiesced before application files are replaced
+- successful `dev-plugins` updates restore only plugins that still validate in the new target runtime
+- newly introduced plugins remain disabled until explicitly enabled
+- service runtime/boot distinctions are preserved across updates, including intentionally runtime-stopped but boot-enabled plugins
+- failed service-state restoration leaves that plugin stopped/disabled and clears its activation flag
+- plugin controls refuse state/config/lifecycle writes while the application update lock is held
+- core updater rollback remains unchanged; the wrapper repairs the restored split admin/update bridge and then restores pre-update plugin runtime
+- leaving `dev-plugins` for a plugin-free target is handled by the currently installed plugin-aware GitHub updater before target handoff
+- successful transition to a plugin-free target clears plugin activation state and removes the generic `ywd-plugin@.service` template while retaining inert plugin config files
+- failed cross-branch updates restore the old app/config, split admin bridge, and prior plugin service runtime
+- future `dev-plugins` candidate validation requires the service/update-safety payload
+
+## 0.1.0-alpha14-dev — Sandboxed Service Plugin Phase
+
+**Status:** physically tested successfully on the Pi Zero and preserved at `dev-plugins-alpha14-known-good`. WebUI remained responsive and normal DMR/BM behavior remained intact.
+
+Highlights:
+
+- first service-backed plugin model using a single trusted `ywd-plugin@.service` template
+- restrictive systemd sandbox with no RF/device ownership, Linux capabilities, or normal network sockets
+- per-plugin enable/disable with systemd boot activation
+- START / STOP RUNTIME / RESTART lifecycle controls
+- service runtime + boot state displayed separately in the WebUI
+- plugin journal viewing and health/test actions
+- harmless `service-heartbeat` reference plugin with configurable label/interval
+- master kill switch stops/disables service plugins and clears activation state
+- service plugin state survives reboot when explicitly enabled
+- service status is queried on Plugin Manager refresh rather than through another background DMR-status polling loop
+
+## 0.1.0-alpha13.1-dev — Plugin Master-Switch Safety Polish
+
+**Status:** physically tested successfully and preserved at `dev-plugins-alpha13.1-known-good`.
+
+Highlights:
+
+- custom YWD confirmation modal for master and individual plugin disable actions
+- master OFF now clears all per-plugin activation state instead of leaving an `ARMED` state
+- individual lifecycle/test controls are inert while the subsystem is disabled
+- re-enabling the master switch never silently reactivates previous plugins
+- existing Alpha13 master-off/armed state normalizes fail-closed
+
 ## 0.1.0-alpha13-dev — Plugin Framework v1
 
 **Status:** first `dev-plugins` framework test build. The stable unified app/OS baseline remains preserved at `dev-alpha12.2-os-integrated-known-good`. No MMDVM-Host or DMRGateway pin changes are included.
@@ -206,7 +255,7 @@ Introduced:
 
 ## 0.1.0-alpha8-dev — Talkgroup Manager
 
-**Status:** user-tested successfully before Alpha9 work; checkpoint retained as `dev-alpha8-known-good`.
+**Status:** user-tested successfully before Alpha9; checkpoint retained as `dev-alpha8-known-good`.
 
 Highlights:
 
