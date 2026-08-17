@@ -132,10 +132,12 @@ required=(
   VERSION INSTALL.sh INSTALL-core.sh UPDATE.sh UPDATE-core.sh UNINSTALL.sh
   GITHUB-UPDATE.sh GITHUB-UPDATE-core.sh MIGRATE-TO-GITHUB.sh MIGRATE-TO-GITHUB-core.sh
   bin/ywd-hotspotctl bin/ywd-hotspotctl-core bin/ywd-ui.sh lab/mmdvm-diag.sh
-  lib/dashboard.py lib/dashboard_core.py lib/admin.py lib/build_info.py lib/generate-config.py lib/migrate.py
+  lib/dashboard.py lib/dashboard_core.py lib/dashboard_update.py lib/admin.py lib/update_admin.py lib/update_runner.py
+  lib/build_info.py lib/generate-config.py lib/migrate.py
   web/index.html web/app.js web/app-core.js web/talkgroups.js web/ui-polish.js web/ui-polish.css web/style.css
+  web/update.js web/update.css web/update-progress.js
   sudoers/ywd-hotspot systemd/ywd-mmdvmhost.service systemd/ywd-dmrgateway.service
-  systemd/ywd-dashboard.service systemd/ywd-activity.service
+  systemd/ywd-dashboard.service systemd/ywd-activity.service systemd/ywd-update.service
   assets/branding/ywd-hotspot-badge-256.webp
 )
 for f in "${required[@]}"; do
