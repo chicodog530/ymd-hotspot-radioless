@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Software-update extension for the YWD-Hotspot dashboard handler."""
+"""Software-update and optional UI extension routes for YWD-Hotspot."""
 from __future__ import annotations
 
 import json
@@ -42,14 +42,17 @@ def wrap_handler(base):
     class UpdateHandler(base):
         def do_GET(self):
             path = urlparse(self.path).path
-            if path == "/update.js":
-                self.serve_static("update.js", "application/javascript; charset=utf-8")
-                return
-            if path == "/update-progress.js":
-                self.serve_static("update-progress.js", "application/javascript; charset=utf-8")
-                return
-            if path == "/update.css":
-                self.serve_static("update.css", "text/css; charset=utf-8")
+            static = {
+                "/update.js": ("update.js", "application/javascript; charset=utf-8"),
+                "/update-progress.js": ("update-progress.js", "application/javascript; charset=utf-8"),
+                "/update.css": ("update.css", "text/css; charset=utf-8"),
+                "/instrumentation.js": ("instrumentation.js", "application/javascript; charset=utf-8"),
+                "/instrumentation-bootstrap.js": ("instrumentation-bootstrap.js", "application/javascript; charset=utf-8"),
+                "/instrumentation.css": ("instrumentation.css", "text/css; charset=utf-8"),
+            }
+            if path in static:
+                name, mime = static[path]
+                self.serve_static(name, mime)
                 return
             if path == "/api/update/status":
                 # Deliberately public and sanitized: a successful update restarts
