@@ -6,6 +6,52 @@ YWD-Hotspot is still alpha software. These are project checkpoints, not a promis
 
 ---
 
+## 0.1.0-alpha13-dev — Plugin Framework v1
+
+**Status:** first `dev-plugins` framework test build. The stable unified app/OS baseline remains preserved at `dev-alpha12.2-os-integrated-known-good`. No MMDVM-Host or DMRGateway pin changes are included.
+
+Highlights:
+
+- trusted core **PLUGINS** WebUI section
+- global plugin-subsystem master enable/disable control
+- globally disabled by default when no plugin state file exists
+- installed/enabled/active plugin counts and health display
+- strict first-party manifest + configuration-schema validation
+- per-plugin enable/disable state
+- schema-rendered per-plugin configuration with isolated files under `/etc/ywd-hotspot/plugins/`
+- plugin subsystem state stored separately at `/etc/ywd-hotspot/plugin-state.json`
+- plugin state/config automatically ride inside the existing protected `/etc/ywd-hotspot` update backup
+- narrow authenticated WebUI actions for plugin system state, plugin state, and plugin configuration
+- existing root-owned admin dispatcher remains the only privilege boundary; there is no arbitrary plugin sudo command
+- future `dev-plugins` candidates validate the Plugin API v1 payload before live installation
+- switching back to plain `dev`/`main` remains supported; stable targets are not required to contain experimental plugin files
+
+Plugin API v1 safety boundary:
+
+- declarative packages only
+- no plugin Python import/execution
+- no plugin JavaScript/CSS injection
+- no plugin services
+- no RF-mode ownership
+- RF-mode manifests are rejected
+- service-backed manifests are rejected
+- unsupported/unknown manifest fields or capabilities fail closed
+- Plugin Manager remains available even when plugin support itself is disabled
+
+Reference package:
+
+- bundled `system-info` plugin exercises discovery, validation, master enable/disable, per-plugin enable/disable, configuration persistence, status data, and controlled test flow
+- its provider is implemented by trusted core and cannot control RF, BrandMeister, systemd, networking, OLED, or privileged commands
+
+Documentation:
+
+- `docs/PLUGINS.md` records the v1 contract and later service/RF-plugin safety requirements
+- source manifest tracks the Plugin Manager, admin bridge, WebUI assets, and reference package
+
+## 0.1.0-alpha12.3-dev — Persistent dev-plugins Update Channel
+
+Added `dev-plugins` as a persistent GitHub update channel across the CLI, managed checkout, detached WebUI updater, and About-page software-update UI. This is the bootstrap build used to move a physically tested unified Alpha12.2 appliance onto the isolated plugin-development line without reflashing.
+
 ## 0.1.0-alpha12.2-dev — Unlock + Update Feedback Polish
 
 **Status:** active `dev` test build. `0.1.0-alpha12.1-dev` is preserved at `dev-alpha12.1-known-good`. No MMDVM-Host or DMRGateway pin changes are included.
