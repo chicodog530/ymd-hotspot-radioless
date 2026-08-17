@@ -41,6 +41,7 @@ def wrap_handler(base):
             path = parsed.path
             static = {
                 "/plugin-manager.js": ("plugin-manager.js", "application/javascript; charset=utf-8"),
+                "/plugin-config-actions.js": ("plugin-config-actions.js", "application/javascript; charset=utf-8"),
                 "/plugin-manager.css": ("plugin-manager.css", "text/css; charset=utf-8"),
             }
             if path in static:
