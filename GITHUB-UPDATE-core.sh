@@ -197,9 +197,24 @@ echo
 read -r -p "Apply $target_version from $label @ $target_short? [y/N]: " answer
 [[ "$answer" =~ ^[Yy]$ ]] || { echo "Cancelled."; exit 0; }
 
+repair_live_admin_bridge(){
+  local live=/opt/ywd-hotspot/app
+  [[ -f "$live/lib/admin_dispatch.sh" && -f "$live/lib/admin.py" ]] || return 0
+  install -o root -g root -m 0755 "$live/lib/admin.py" /usr/local/libexec/ywd-hotspot-admin-core
+  [[ -f "$live/lib/setup_admin.py" ]] && install -o root -g root -m 0755 "$live/lib/setup_admin.py" /usr/local/libexec/ywd-hotspot-setup-admin
+  [[ -f "$live/lib/update_admin.py" ]] && install -o root -g root -m 0755 "$live/lib/update_admin.py" /usr/local/libexec/ywd-hotspot-update-admin
+  [[ -f "$live/lib/update_runner.py" ]] && install -o root -g root -m 0755 "$live/lib/update_runner.py" /usr/local/libexec/ywd-update-runner
+  install -o root -g root -m 0755 "$live/lib/admin_dispatch.sh" /usr/local/libexec/ywd-hotspot-admin
+  [[ -f "$live/sudoers/ywd-hotspot" ]] && install -o root -g root -m 0440 "$live/sudoers/ywd-hotspot" /etc/sudoers.d/ywd-hotspot
+  if command -v visudo >/dev/null 2>&1 && [[ -f /etc/sudoers.d/ywd-hotspot ]]; then
+    visudo -cf /etc/sudoers.d/ywd-hotspot >/dev/null
+  fi
+  systemctl daemon-reload
+}
+
 # When leaving a plugin-aware runtime for a target that has no plugin runtime,
 # the currently installed updater owns the transition. The stable target stays
-# blissfully plugin-unaware while plugin services are stopped before handoff.
+# plugin-unaware while plugin services are stopped before handoff.
 transition_helper=""
 transition_snapshot=""
 if (( ! plugin_runtime_target )) && [[ -f /opt/ywd-hotspot/app/lib/plugin_update_safety.py ]]; then
@@ -228,6 +243,8 @@ set -e
 
 if (( update_rc != 0 )); then
   if [[ -n "$transition_helper" && -f "$transition_snapshot" ]]; then
+    echo "Repairing restored admin bridge after target rollback..."
+    repair_live_admin_bridge || echo "[WARN] Restored admin bridge needs manual review."
     echo "Restoring plugin runtime after target rollback..."
     python3 "$transition_helper" restore --snapshot "$transition_snapshot" --lib /opt/ywd-hotspot/app/lib || \
       echo "[WARN] Plugin runtime restore needs manual review."
