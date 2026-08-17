@@ -17,7 +17,12 @@ if [[ -d "$SELF/lib/console" ]]; then
     bash -n "$SELF/lib/console/$f"
   done
 fi
-python3 -m py_compile "$SELF/lib/update_runner.py" "$SELF/lib/update_admin.py"
+for f in \
+  lib/update_runner.py lib/update_admin.py lib/dashboard_update.py \
+  web/update.js web/update.css systemd/ywd-update.service; do
+  [[ -f "$SELF/$f" ]] || { echo "[FAIL] Update source missing $f" >&2; exit 1; }
+done
+python3 -m py_compile "$SELF/lib/update_runner.py" "$SELF/lib/update_admin.py" "$SELF/lib/dashboard_update.py"
 [[ -f "$SELF/lib/system_branding.sh" ]] && bash -n "$SELF/lib/system_branding.sh"
 
 CORE="$SELF/UPDATE-core.sh"
