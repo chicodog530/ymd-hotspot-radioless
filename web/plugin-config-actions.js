@@ -1,7 +1,5 @@
 'use strict';
 (() => {
-  const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-
   async function post(url, body) {
     const response = await fetch(url, {
       method: 'POST',
@@ -64,7 +62,8 @@
         combined.textContent = 'SAVE + RESTART PLUGIN';
         save.parentElement?.appendChild(combined);
       }
-      combined.disabled = !!save.disabled || !!restart.disabled || combined.dataset.pluginBusy === '1';
+      const shouldDisable = !!save.disabled || !!restart.disabled || combined.dataset.pluginBusy === '1';
+      if (combined.disabled !== shouldDisable) combined.disabled = shouldDisable;
     });
   }
 
@@ -114,7 +113,10 @@
     if (!button || button.disabled) return;
     event.preventDefault();
     event.stopPropagation();
-    saveAndRestart(button);
+    saveAndRestart(button).catch(error => {
+      showResult(button.dataset.pluginId || '', error.message, true);
+      notify(error.message, true);
+    });
   }, true);
 
   const observer = new MutationObserver(syncButtons);
