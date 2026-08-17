@@ -130,7 +130,7 @@ class AudioBridge:
             
             await asyncio.sleep(0.02)
 
-    async def handle_client(self, websocket, path):
+    async def handle_client(self, websocket):
         logging.info(f"New Web Terminal connected from {websocket.remote_address}")
         self.connected_clients.add(websocket)
         try:
