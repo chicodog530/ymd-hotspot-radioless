@@ -21,10 +21,7 @@
 
   let ws = null;
   let audioCtx = null;
-  let micStream = null;
-  let micNode = null;
-  let scriptProcessor = null;
-  let gainNode = null;
+  let nextAudioTime = 0;
   let speakerNode = null; // To route incoming audio to specific speaker
 
   let isConnected = false;
@@ -32,23 +29,9 @@
 
   async function populateDevices() {
     try {
-      // Prompt for permission first so devices have labels
-      await navigator.mediaDevices.getUserMedia({ audio: true });
-      
       const devices = await navigator.mediaDevices.enumerateDevices();
       
-      const mics = devices.filter(d => d.kind === 'audioinput');
       const speakers = devices.filter(d => d.kind === 'audiooutput');
-
-      if (mics.length > 0) {
-        dom.micSelect.innerHTML = '';
-        mics.forEach(d => {
-          const opt = document.createElement('option');
-          opt.value = d.deviceId;
-          opt.textContent = d.label || `Microphone ${dom.micSelect.length + 1}`;
-          dom.micSelect.appendChild(opt);
-        });
-      }
 
       if (speakers.length > 0) {
         dom.speakerSelect.innerHTML = '';
@@ -66,45 +49,8 @@
 
   async function connectAudio() {
     try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error("Your browser is blocking microphone access because this dashboard is running on HTTP instead of HTTPS. \n\nTo fix this in Chrome/Edge, go to: chrome://flags/#unsafely-treat-insecure-origin-as-secure \nEnable the flag and add: http://" + window.location.host);
-      }
-
-      const constraints = {
-        audio: {
-          deviceId: dom.micSelect.value !== 'default' ? { exact: dom.micSelect.value } : undefined,
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false
-        }
-      };
-      
-      micStream = await navigator.mediaDevices.getUserMedia(constraints);
       audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 8000 });
-      
-      // Microphone path
-      micNode = audioCtx.createMediaStreamSource(micStream);
-      gainNode = audioCtx.createGain();
-      gainNode.gain.value = dom.micGain.value / 100;
-      
-      // We use ScriptProcessor for raw PCM access (deprecated but widely supported and simple for 8khz mono)
-      scriptProcessor = audioCtx.createScriptProcessor(4096, 1, 1);
-      
-      scriptProcessor.onaudioprocess = (e) => {
-        if (!isTransmitting || !ws || ws.readyState !== WebSocket.OPEN) return;
-        const inputData = e.inputBuffer.getChannelData(0);
-        // Convert Float32Array to 16-bit PCM for the backend
-        const pcm16 = new Int16Array(inputData.length);
-        for (let i = 0; i < inputData.length; i++) {
-          let s = Math.max(-1, Math.min(1, inputData[i]));
-          pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-        }
-        ws.send(pcm16.buffer);
-      };
-
-      micNode.connect(gainNode);
-      gainNode.connect(scriptProcessor);
-      scriptProcessor.connect(audioCtx.destination); // Required to keep it running
+      nextAudioTime = audioCtx.currentTime;
 
       // Setup WebSocket
       const wsUrl = `ws://${window.location.hostname}:8081/`;
@@ -160,9 +106,23 @@
   }
   
   function playAudio(pcmData) {
-      // Decode incoming 16-bit PCM and play it
-      // For simplicity in this skeleton, we'll assume the backend sends properly formatted chunks
-      // This will be expanded when we build the bridge.
+      if (!audioCtx) return;
+      
+      const floatArr = new Float32Array(pcmData);
+      const buffer = audioCtx.createBuffer(1, floatArr.length, 8000);
+      buffer.copyToChannel(floatArr, 0);
+      
+      const source = audioCtx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(audioCtx.destination); 
+      
+      // Gapless playback scheduling
+      if (nextAudioTime < audioCtx.currentTime) {
+          nextAudioTime = audioCtx.currentTime + 0.1; // Add small buffer if underrun
+      }
+      
+      source.start(nextAudioTime);
+      nextAudioTime += buffer.duration;
   }
 
   function disconnectAudio() {
@@ -181,10 +141,6 @@
     if (audioCtx) {
       audioCtx.close();
       audioCtx = null;
-    }
-    if (micStream) {
-      micStream.getTracks().forEach(t => t.stop());
-      micStream = null;
     }
   }
 
@@ -224,13 +180,8 @@
   dom.connectBtn.addEventListener('click', connectAudio);
   dom.disconnectBtn.addEventListener('click', disconnectAudio);
   
-  dom.pttBtn.addEventListener('mousedown', () => { if(isConnected) { isTransmitting = true; sendControlState(); updatePttUI(); } });
-  dom.pttBtn.addEventListener('mouseup', () => { if(isConnected) { isTransmitting = false; sendControlState(); updatePttUI(); } });
-  dom.pttBtn.addEventListener('mouseleave', () => { if(isTransmitting) { isTransmitting = false; sendControlState(); updatePttUI(); } });
-  
-  dom.micGain.addEventListener('input', (e) => {
-    if (gainNode) gainNode.gain.value = e.target.value / 100;
-  });
+  // Remove PTT button logic
+  dom.pttBtn.addEventListener('click', () => { alert('PTT is disabled in Listen-Only mode.'); });
 
   // Init
   populateDevices();
