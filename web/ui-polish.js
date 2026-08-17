@@ -6,7 +6,6 @@
   const reduceMotion = !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
   // Reuse the dashboard's existing CSP-approved modal/dialog/button styles.
-  // Alpha10 adds motion/busy/toast polish through same-origin ui-polish.css.
   const overlay = document.createElement('div');
   overlay.className = 'modal';
   overlay.id = 'ywdConfirmModal';
@@ -106,6 +105,75 @@
       if (typeof setCtl === 'function') setCtl();
     };
   }
+
+  function ensureLoginFeedback() {
+    const modal = $('loginModal');
+    const pw = $('loginPw');
+    if (!modal || !pw) return null;
+    let feedback = $('loginFeedback');
+    if (!feedback) {
+      feedback = document.createElement('div');
+      feedback.id = 'loginFeedback';
+      feedback.className = 'login-feedback';
+      feedback.hidden = true;
+      feedback.setAttribute('role', 'alert');
+      feedback.setAttribute('aria-live', 'assertive');
+      pw.insertAdjacentElement('afterend', feedback);
+    }
+    return feedback;
+  }
+
+  function clearLoginFeedback() {
+    const feedback = ensureLoginFeedback();
+    if (feedback) {
+      feedback.textContent = '';
+      feedback.hidden = true;
+    }
+    $('loginPw')?.removeAttribute('aria-invalid');
+  }
+
+  function showLoginFeedback(message) {
+    const feedback = ensureLoginFeedback();
+    if (!feedback) return;
+    feedback.textContent = message;
+    feedback.hidden = false;
+    $('loginPw')?.setAttribute('aria-invalid', 'true');
+  }
+
+  // Replace the old toast-only login failure with feedback that remains visible
+  // inside the unlock modal. A failed attempt clears and refocuses the password.
+  ensureLoginFeedback();
+  if ($('loginBtn')) $('loginBtn').onclick = () => {
+    clearLoginFeedback();
+    $('loginPw').value = '';
+    $('loginModal').classList.add('on');
+    setTimeout(() => $('loginPw').focus(), 50);
+  };
+  if ($('doLogin')) $('doLogin').onclick = async () => {
+    clearLoginFeedback();
+    const button = $('doLogin');
+    const done = beginBusy(button, 'CHECKING…');
+    try {
+      await post('/api/login', {password: $('loginPw').value});
+      $('loginModal').classList.remove('on');
+      toast('Control mode unlocked');
+      await getStatus();
+      loadConfig(true);
+    } catch (e) {
+      const raw = String(e?.message || '').trim();
+      const authFailure = /password|unauthorized|forbidden|invalid|authentication/i.test(raw);
+      $('loginPw').value = '';
+      showLoginFeedback(authFailure ? 'Incorrect password. Try again.' : (raw || 'Could not unlock controls. Try again.'));
+      setTimeout(() => $('loginPw').focus(), 30);
+    } finally {
+      done();
+    }
+  };
+  if ($('loginPw')) {
+    $('loginPw').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); $('doLogin').click(); } };
+    $('loginPw').addEventListener('input', clearLoginFeedback);
+  }
+  document.querySelector('[data-close="loginModal"]')?.addEventListener('click', clearLoginFeedback);
 
   function runBusy(el, label, fn) {
     const done = beginBusy(el, label);
@@ -288,6 +356,41 @@
     ['tgSearchBtn', 'SEARCHING…'],
     ['tgRefreshDirectory', 'REFRESHING…']
   ].forEach(([id, label]) => wrapWorking(id, label));
+
+  // update.js creates the confirmation modal after this file loads. Capture the
+  // click so the button responds immediately while /api/update/start launches
+  // the detached update service; the progress modal takes over when it is ready.
+  document.addEventListener('click', e => {
+    const button = e.target.closest?.('#confirmUpdate');
+    if (!button || button.dataset.ywdUpdateStarting === '1') return;
+    const previousText = button.textContent;
+    const previousAria = button.getAttribute('aria-busy');
+    button.dataset.ywdUpdateStarting = '1';
+    button.classList.add('ywd-working');
+    button.setAttribute('aria-busy', 'true');
+    button.textContent = 'STARTING…';
+    setTimeout(() => {
+      const cancel = $('cancelUpdate');
+      if (cancel) cancel.disabled = true;
+    }, 0);
+
+    let timer = null;
+    const reset = () => {
+      if (timer) clearInterval(timer);
+      delete button.dataset.ywdUpdateStarting;
+      button.classList.remove('ywd-working');
+      button.textContent = previousText;
+      if (previousAria == null) button.removeAttribute('aria-busy');
+      else button.setAttribute('aria-busy', previousAria);
+      const cancel = $('cancelUpdate');
+      if (cancel) cancel.disabled = false;
+    };
+    let ticks = 0;
+    timer = setInterval(() => {
+      const modal = $('updateModal');
+      if (!modal || !modal.classList.contains('on') || ++ticks >= 300) reset();
+    }, 100);
+  }, true);
 
   // Capture dangerous/confirming actions before their existing onclick handlers.
   document.addEventListener('click', async e => {
