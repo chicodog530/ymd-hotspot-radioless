@@ -19,7 +19,7 @@
 ---
 
 > [!IMPORTANT]
-> **Development status:** `0.1.0-alpha12-dev` is the active `dev` build. `main` remains the promoted/conservative line. Alpha12 adds optional LIVE DMR instrumentation and a unified OLED runtime renderer while keeping Basic display modes as the low-overhead defaults.
+> **Development status:** `0.1.0-alpha12.1-dev` is the active `dev` build. `main` remains the promoted/conservative line. Alpha12.1 polishes the optional LIVE DMR instrument panel with strict-CSP-safe meters, mode-aware RX/TX instrumentation, completed-call measurement hold, and more useful sample-based histories. Basic display modes remain the low-overhead defaults.
 
 > [!WARNING]
 > The built-in WebUI is plain HTTP for a trusted LAN. Do **not** forward the dashboard port directly to the public Internet.
@@ -183,7 +183,7 @@ Full details and recovery notes: **[docs/UPGRADING.md](docs/UPGRADING.md)**
 
 ## 📟 LIVE DMR + Display
 
-Alpha12 adds an optional RF-instrument style Status panel while preserving the established Basic UI.
+Alpha12/12.1 adds an optional RF-instrument style Status panel while preserving the established Basic UI.
 
 ### WebUI LIVE DMR modes
 
@@ -194,15 +194,21 @@ Enhanced instrumentation can add:
 - segmented or smooth RSSI meter
 - BER quality meter with configurable thresholds
 - configured TX/RF drive meters
-- peak hold
-- rolling RSSI and BER traces
+- peak hold and completed-measurement hold
+- sample-based or time-window RSSI/BER history traces
 - animated RF-energy visualization
 - live top-strip RX/TX information
 - 5/10/20 fps performance targets
 - reduced-motion controls
 - Basic, Balanced, Instrument, Maximum Shiny, and Custom presets
 
-The gauges consume the dashboard's existing status payload; enhanced mode does not create another server polling loop. Missing RSSI/BER stays missing rather than being fabricated. The animated RF-energy display is presentation, not an audio VU meter.
+RX and TX intentionally use different instruments. During active **RF receive**, RSSI/BER reads `SAMPLING…` / `MEASURING…` until the normal MMDVM-Host completed-call journal summary supplies measured values. During **network → RF TX**, the UI prioritizes configured TX/RF drive and shows network quality as pending until packet-loss/BER results are available.
+
+The pinned MMDVM-Host does have an optional MQTT JSON path for roughly one-second internal RSSI/BER telemetry, but YWD-Hotspot deliberately does not add an MQTT broker/client dependency to the original Pi Zero just to animate gauges. The lightweight journal/activity collector remains the default stability-oriented path.
+
+The gauges consume the dashboard's existing status payload; enhanced mode does not create another server polling loop. Missing measurements stay missing rather than being fabricated. The animated RF-energy display is presentation, not an audio VU meter.
+
+All dynamic meter/progress levels are represented through same-origin CSS state rather than inline style mutations, preserving the dashboard's strict `style-src 'self'` CSP.
 
 ### Unified OLED
 
@@ -308,7 +314,7 @@ Install/update writes non-secret provenance to:
 The CLI and About page show:
 
 ```text
-Version         0.1.0-alpha12-dev
+Version         0.1.0-alpha12.1-dev
 Git branch      dev
 Update channel  dev
 Git commit      <commit SHA>
