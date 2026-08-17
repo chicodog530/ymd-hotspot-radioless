@@ -6,9 +6,37 @@ YWD-Hotspot is still alpha software. These are project checkpoints, not a promis
 
 ---
 
-## 0.1.0-alpha12-dev — Live DMR Instrument Panel + Unified OLED
+## 0.1.0-alpha12.1-dev — Instrument Panel + CSP Polish
 
 **Status:** active `dev` test build. No MMDVM-Host or DMRGateway pin changes are included.
+
+Highlights:
+
+- canonical configuration schema 5
+- RX and TX now use different instrument layouts based on measurements the hotspot can honestly provide
+- active RF receive shows `SAMPLING…` / `MEASURING…` until MMDVM-Host reports the completed-call RSSI/BER values
+- completed RX RSSI/BER can remain visible for a configurable measurement-hold period
+- network → RF TX hides meaningless RX signal/BER gauges and prioritizes configured TX Level / RF Level
+- TX network quality is `PENDING` during the call and displays completed packet-loss/BER data when available
+- history defaults to the last completed RF samples instead of losing useful values after a short quiet period
+- configurable sample count, maximum sample age, or time-window history mode
+- all instrument meter levels are rendered with bounded `data-*` states and same-origin CSS rather than JavaScript inline styles
+- Talkgroup Manager no longer injects a runtime `<style>` element
+- update progress bar no longer changes `style.width`; strict `style-src 'self'` remains unchanged
+- removed the explanatory “Progress is stage-driven…” line from the update modal
+- WebUI assets use Alpha12.1 cache-busting versions
+- `docs/DISPLAY.md` documents measurement timing, TX/RX semantics, schema 5, CSP behavior, and history modes
+
+Telemetry note:
+
+- the pinned MMDVM-Host internally accumulates RF RSSI/BER at roughly 1.08-second intervals
+- its live JSON RSSI/BER telemetry is published through the optional MQTT path rather than the journal stream YWD-Hotspot currently consumes
+- Alpha12.1 deliberately does not add an MQTT broker/client dependency to the original Pi Zero merely to animate gauges
+- the lightweight activity collector therefore continues using honest completed-call journal measurements
+
+## 0.1.0-alpha12-dev — Live DMR Instrument Panel + Unified OLED
+
+**Status:** superseded by Alpha12.1 after initial Pi/browser testing. No MMDVM-Host or DMRGateway pin changes are included.
 
 Highlights:
 
@@ -49,7 +77,7 @@ OLED/runtime display:
 
 Update/build safety:
 
-- dashboard now explicitly serves instrumentation JS/CSS assets
+- dashboard explicitly serves instrumentation JS/CSS assets
 - GitHub candidate manifest requires instrumentation and unified-OLED payload
 - install/update wrappers preflight unified OLED and instrumentation files before live service work
 - uninstall restores the OS headless OLED command/drop-in state
@@ -107,7 +135,6 @@ Highlights:
 ## 0.1.0-alpha9-dev — Console + UI Polish
 
 Introduced:
-
 - shared lightweight terminal presentation helper in `bin/ywd-ui.sh`
 - ANSI cyan/blue/magenta/green/yellow/red output matching the WebUI palette
 - automatic plain output when stdout is redirected or `NO_COLOR` is set
