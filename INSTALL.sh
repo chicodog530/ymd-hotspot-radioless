@@ -16,8 +16,9 @@ if [[ -d "$SELF/lib/console" ]]; then
     bash -n "$SELF/lib/console/$f"
   done
 fi
-python3 -m py_compile "$SELF/lib/update_runner.py" "$SELF/lib/update_admin.py"
+python3 -m py_compile "$SELF/lib/update_runner.py" "$SELF/lib/update_admin.py" "$SELF/lib/oled.py"
 [[ -f "$SELF/lib/system_branding.sh" ]] && bash -n "$SELF/lib/system_branding.sh"
+[[ -f "$SELF/lib/oled_owner.sh" ]] && bash -n "$SELF/lib/oled_owner.sh"
 
 CORE="$SELF/INSTALL-core.sh"
 [[ -f "$CORE" ]] || CORE="/opt/ywd-hotspot/repo/INSTALL-core.sh"
@@ -45,4 +46,10 @@ fi
 # identity as the custom OS image, while preserving the host defaults for undo.
 if [[ -f "$SELF/lib/system_branding.sh" ]]; then
   sudo bash "$SELF/lib/system_branding.sh" install "$SELF"
+fi
+
+# On YWD-Hotspot OS, preserve ywd-headless-oled as the only SSD1306 owner while
+# using the same renderer as generic installs.  On non-OS installs this is a no-op.
+if [[ -f "$SELF/lib/oled_owner.sh" ]]; then
+  sudo bash "$SELF/lib/oled_owner.sh" install "$SELF"
 fi
