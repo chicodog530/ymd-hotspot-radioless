@@ -5,6 +5,7 @@ MODE="${1:-install}"
 SOURCE_ROOT="${2:-/opt/ywd-hotspot/app}"
 STATE_DIR="/var/lib/ywd-hotspot/private/system-branding"
 EXEC_LIST="$STATE_DIR/update-motd-exec.list"
+BRANDING_DIR="$SOURCE_ROOT/lib/branding"
 
 need_root() {
   if [[ $EUID -ne 0 ]]; then
@@ -34,13 +35,13 @@ save_originals_once() {
 }
 
 install_branding() {
-  [[ -f "$SOURCE_ROOT/etc/issue" ]] || { echo "[FAIL] Missing $SOURCE_ROOT/etc/issue" >&2; exit 1; }
-  [[ -f "$SOURCE_ROOT/etc/motd" ]] || { echo "[FAIL] Missing $SOURCE_ROOT/etc/motd" >&2; exit 1; }
+  [[ -f "$BRANDING_DIR/issue" ]] || { echo "[FAIL] Missing $BRANDING_DIR/issue" >&2; exit 1; }
+  [[ -f "$BRANDING_DIR/motd" ]] || { echo "[FAIL] Missing $BRANDING_DIR/motd" >&2; exit 1; }
   save_originals_once
 
-  install -o root -g root -m 0644 "$SOURCE_ROOT/etc/issue" /etc/issue
-  install -o root -g root -m 0644 "$SOURCE_ROOT/etc/issue" /etc/issue.net
-  install -o root -g root -m 0644 "$SOURCE_ROOT/etc/motd" /etc/motd
+  install -o root -g root -m 0644 "$BRANDING_DIR/issue" /etc/issue
+  install -o root -g root -m 0644 "$BRANDING_DIR/issue" /etc/issue.net
+  install -o root -g root -m 0644 "$BRANDING_DIR/motd" /etc/motd
 
   # Suppress distro-generated MOTD fragments so SSH/local logins show the YWD
   # appliance identity instead of a second Debian/Raspberry Pi banner. Original
