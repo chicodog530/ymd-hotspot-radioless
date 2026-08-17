@@ -1,6 +1,11 @@
 # YWD-Hotspot Plugin Framework
 
-Plugin development currently lives on the `dev-plugins` branch. The stable `dev` appliance remains the rollback baseline. The first physically proven framework checkpoint is `dev-plugins-alpha13.1-known-good`.
+Plugin development currently lives on the `dev-plugins` branch. The stable `dev` appliance remains the non-plugin rollback baseline.
+
+Physically proven checkpoints:
+
+- `dev-plugins-alpha13.1-known-good` — declarative Plugin Framework v1 + fail-closed master switch
+- `dev-plugins-alpha14-known-good` — sandboxed service-plugin lifecycle, logs, reboot behavior, and master kill-switch
 
 ## Core plugin rules
 
@@ -34,7 +39,7 @@ The bundled `system-info` reference plugin proves discovery, validation, configu
 
 ## Sandboxed Service Plugin API v1
 
-After the declarative framework was physically proven on the Pi Zero, the next phase adds tightly constrained service-backed plugins.
+After the declarative framework was physically proven on the Pi Zero, the next phase added tightly constrained service-backed plugins.
 
 Service packages live separately:
 
@@ -83,6 +88,49 @@ While enabled, WebUI runtime controls provide:
 
 Master **DISABLE ALL PLUGINS** stops/disables all service plugins first. If a service cannot be safely stopped, the master-disable operation fails rather than falsely reporting that the subsystem is off.
 
+## Update + rollback safety
+
+Plugin-aware application updates use a trusted transaction helper: `lib/plugin_update_safety.py`.
+
+### Updating within `dev-plugins`
+
+Before the proven RF-aware core updater replaces application files, the incoming wrapper:
+
+1. captures the plugin master state and every per-plugin activation flag
+2. captures each service plugin's actual runtime and systemd boot state
+3. stops/disables every YWD plugin service without changing plugin config files
+4. runs the existing YWD application updater/rollback engine
+
+After a successful update, the helper validates the **new** declarative and service catalogs before restoring anything.
+
+- previously enabled plugins are restored only if they still validate
+- newly introduced plugins remain disabled until explicitly enabled
+- service plugins preserve the captured boot/runtime distinction (`ACTIVE`, `STOPPED + boot enabled`, etc.)
+- a plugin that disappeared or became invalid is left disabled
+- a service whose boot/runtime state cannot be restored is stopped/disabled and its activation flag is cleared
+
+If the core update fails, the core updater first restores the previous application/configuration. The wrapper then repairs the restored split admin/update dispatcher and restores the previous plugin state/runtime against the restored old application.
+
+### Plugin controls during an update
+
+The GitHub updater owns `/run/ywd-hotspot-update.lock`. Plugin state/config/lifecycle writes refuse to run while that lock is held, preventing a browser action from reactivating or reconfiguring a plugin halfway through an update transaction.
+
+### Leaving `dev-plugins`
+
+A switch from a plugin-aware build to a target that has **no plugin runtime** is handled by the currently installed plugin-aware GitHub updater before control is handed to the target branch.
+
+The transition:
+
+1. snapshots plugin activation/runtime state
+2. stops/disables all plugin service instances
+3. runs the plugin-free target updater
+4. on failure, repairs the restored admin bridge and restores the old plugin runtime
+5. on success, clears master/per-plugin activation state and removes `/etc/systemd/system/ywd-plugin@.service`
+
+Plugin configuration files under `/etc/ywd-hotspot/plugins/` remain as inert data. Returning later to `dev-plugins` does **not** automatically reactivate them; the master switch and individual plugins must be explicitly enabled again.
+
+Stable `dev` therefore does not need plugin-specific code and does not retain an active/orphaned plugin service surface.
+
 ## Reference service plugin: Service Heartbeat Test
 
 `service-heartbeat` is intentionally harmless. It periodically writes a configurable heartbeat line to its own systemd journal and otherwise sleeps.
@@ -98,7 +146,8 @@ It exists to prove:
 7. configuration persistence/restart behavior
 8. master kill-switch behavior
 9. reboot behavior
-10. Pi Zero responsiveness/overhead
+10. update/rollback state preservation
+11. Pi Zero responsiveness/overhead
 
 It has no RF, networking, OLED, BrandMeister, device, or privileged-command access.
 
@@ -122,9 +171,8 @@ When the master switch is disabled, installed package metadata and configuration
 
 ## Planned later work
 
-Service-backed plugins must become boringly reliable before RF-mode plugins are permitted. Later safety requirements include:
+Service-backed plugins must remain boringly reliable before RF-mode plugins are permitted. Later safety requirements include:
 
-- deterministic service handling across application updates/rollback
 - plugin install/uninstall/data-removal workflow
 - explicit dependency/hardware checks
 - richer service resource limits/health policy
