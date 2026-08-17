@@ -6,9 +6,23 @@ YWD-Hotspot is still alpha software. These are project checkpoints, not a promis
 
 ---
 
+## 0.1.0-alpha12.2-dev — Unlock + Update Feedback Polish
+
+**Status:** active `dev` test build. `0.1.0-alpha12.1-dev` is preserved at `dev-alpha12.1-known-good`. No MMDVM-Host or DMRGateway pin changes are included.
+
+Highlights:
+
+- wrong WebUI unlock passwords now report the failure inside the UNLOCK CONTROLS modal instead of behind it as a toast
+- failed unlock attempts clear the password field and refocus it for the next attempt
+- unlock submission shows a CSP-safe `CHECKING…` spinner/busy state while authentication is in flight
+- the final About-page `INSTALL UPDATE` button immediately changes to a CSP-safe `STARTING…` spinner state while `/api/update/start` launches the detached updater
+- update-start feedback hands off to the existing progress modal as soon as the detached update job becomes visible
+- modal error/busy presentation remains external-CSS based; strict `style-src 'self'` is unchanged
+- Alpha12.2 cache-busts the updated polish assets
+
 ## 0.1.0-alpha12.1-dev — Instrument Panel + CSP Polish
 
-**Status:** active `dev` test build. No MMDVM-Host or DMRGateway pin changes are included.
+**Status:** user-tested successfully on mobile and desktop browsers and preserved at `dev-alpha12.1-known-good`. No MMDVM-Host or DMRGateway pin changes are included.
 
 Highlights:
 
