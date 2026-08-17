@@ -76,15 +76,8 @@ function ensureTalkgroupManager() {
     </div>`;
   document.querySelector('main')?.append(page);
 
-  const style = document.createElement('style');
-  style.textContent = `
-    .tg-spacer{margin-top:12px}.tg-id{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-weight:700}
-    .tg-plan-add{border-color:rgba(68,255,170,.45)}.tg-plan-remove{border-color:rgba(255,90,110,.5);opacity:.78}
-    .tg-row-actions{display:flex;gap:6px;flex-wrap:wrap}.tg-star{font-size:1.05rem;min-width:36px}
-    #tgFavoriteRows .row,#tgSetRows .row{align-items:center;gap:8px} #tgManagerState{margin-bottom:10px}
-  `;
-  document.head.append(style);
-
+  // All Talkgroup Manager styling lives in same-origin ui-polish.css. Do not
+  // inject a <style> element here; the dashboard intentionally keeps strict CSP.
   tab.onclick = () => {
     $$('.tabs button').forEach(x => x.classList.remove('on'));
     $$('.page').forEach(x => x.classList.remove('on'));
