@@ -1,80 +1,127 @@
 # YWD-Hotspot OS
 
-This directory contains the experimental image-building infrastructure for YWD-Hotspot OS.
+This directory contains the Raspberry Pi image-building infrastructure for YWD-Hotspot OS.
 
-## Safety boundary
+## One repository, one source revision
 
-The normal YWD-Hotspot install and update paths do not depend on anything under `os/`.
+The OS builder now lives beside the normal application source. A build packages the application from the **same Git commit that runs the builder**; there is no separate stale application snapshot to maintain.
 
-- `main` remains the stable application branch.
-- `dev` remains normal application development.
-- `dev-os` is the isolated OS/image-development branch.
+The normal YWD-Hotspot install/update paths do not depend on `os/`. The `os/` subtree is only used when producing a fresh Raspberry Pi OS image.
 
-OS work should consume the current application from this repository, but OS-only changes must not be merged back into `dev` wholesale. Reusable application changes should be moved back deliberately as focused commits or pull requests.
+Key rule:
+
+> Build the image from the source revision you intend to ship. After first boot, normal application updates continue through the managed Git checkout and do not require rebuilding the image.
 
 ## Current target
 
-The first target is Raspberry Pi Zero W / Zero WH (`armhf`) using a Raspberry Pi OS Lite base.
+- Raspberry Pi Zero W / Zero WH (`armhf`)
+- Raspberry Pi OS Lite / trixie
+- MMDVM HAT on `/dev/serial0`
+- SSD1306-style 128x64 OLED on I2C bus 1 / `0x3c`
+- M3-style setup/recovery AP
+- M4 secure first-boot wizard
+- pinned MMDVM-Host + DMRGateway builds
 
-Milestone 1 proved that the Raspberry Pi 5 builder can create and compress a valid Lite image. Milestone 1.1 adds only the pieces needed to validate a headless Pi Zero boot:
+## Safety boundaries
 
-- SSD1306 128x64 I2C OLED boot/network status at bus 1, address `0x3c`.
-- Optional local Wi-Fi provisioning through NetworkManager.
-- A builder-generated ed25519 key for key-only SSH to the fixed `ywd` test user.
-- Hostname `ywd-hotspot` and mDNS support for `ywd-hotspot.local`.
+The image builder preserves the appliance rules proven during M4 testing:
 
-The full MMDVMHost, DMRGateway, WebUI, RF stack, setup AP, and recovery AP are intentionally not part of M1.1 yet.
+- RF services are disabled in the factory image.
+- First-boot setup must complete before RF can be explicitly enabled.
+- `ywd-headless-oled.service` is the sole physical OLED/I2C owner.
+- The OLED renderer is injected from the current root `lib/oled.py`.
+- Console branding/helpers are injected from the current root `lib/branding/` and `lib/console/` sources.
+- The runtime application is copied from the current repository root.
+- The managed source checkout uses a full branch refspec rather than the old single-branch clone.
+- Future application updates use `main` or `dev`; experimental integration branches do not become permanent appliance update channels.
 
 ## Builder workflow
 
-On the Pi 5:
+From the repository root on the build machine:
 
 ```bash
-git switch dev-os
-git pull
+git status --short
+git branch --show-current
 bash os/builder/DOCTOR.sh
+bash os/builder/BUILD.sh
 ```
 
-Optional Wi-Fi injection for a headless test image:
+`BUILD.sh` refuses tracked uncommitted changes so the image provenance always points at reproducible source.
+
+The historical `BUILD-M4.sh` command remains only as a compatibility alias and forwards to `BUILD.sh`.
+
+### Optional build-time Wi-Fi
+
+For headless development images you may preconfigure local Wi-Fi:
 
 ```bash
 bash os/builder/CONFIGURE-WIFI.sh
 ```
 
-Then build:
+Credentials are stored only under ignored `os/local/` state. Without build-time Wi-Fi, the normal setup AP handles onboarding.
 
-```bash
-bash os/builder/BUILD.sh
-```
+## Local/private builder state
 
-The local Wi-Fi credentials and generated SSH private key live only under `os/local/`, which is ignored by Git. After successful Wi-Fi provisioning on the target, the temporary plaintext provisioning file is removed from the image; NetworkManager retains its normal root-only connection profile.
-
-## Expected M1.1 OLED state
-
-A successful userspace boot should produce a display similar to:
+These paths are ignored by Git:
 
 ```text
-YWD HOTSPOT OS
-M1.1 HEADLESS
-
-BOOT OK
-WIFI ONLINE
-<SSID>
-<IPv4 address>
-<temp> YWD-HOTSPOT.LOCAL
+os/.pi-gen/
+os/work/
+os/deploy/
+os/local/
+os/build/
+os/cache/
 ```
 
-Without build-time Wi-Fi configuration, the OLED should show `WIFI NO CONFIG` and `NO IP`. That still proves the target booted far enough to start the M1.1 status service.
+`os/local/ywd-os-dev_ed25519` is the builder-local development SSH key. Never commit or distribute it as project source.
 
-## Layout
+## Build output
 
-- `builder/` — host-side build, doctor, and local Wi-Fi configuration helpers.
-- `pi-gen/` — pinned upstream pi-gen metadata plus YWD custom substages.
-- `local/` — generated builder-only credentials and keys; never committed.
-- `overlay/` — reserved for broader target root-filesystem overlays in later milestones.
-- `firstboot/` — first-boot service and provisioning logic in later milestones.
-- `network/` — setup/recovery AP logic in later milestones.
-- `provisioning/` — provisioning schema and helpers in later milestones.
-- `docs/` — OS-specific design and build notes.
+Successful builds are placed under `os/deploy/` together with `SHA256SUMS-YWD-HOTSPOT-OS`. Compressed `.img.xz` output is integrity-tested with `xz -t` before the builder reports completion.
 
-Generated images, build work directories, caches, deploy artifacts, and local secrets are intentionally excluded from Git.
+The build banner records:
+
+- application version
+- source branch
+- source commit
+- selected application update channel
+- YWD OS identity
+- pinned pi-gen commit
+
+## Source layout
+
+```text
+os/
+├── builder/
+│   ├── BUILD.sh
+│   ├── BUILD-M4.sh        # compatibility alias
+│   ├── DOCTOR.sh
+│   └── CONFIGURE-WIFI.sh
+└── pi-gen/
+    ├── PI-GEN-COMMIT
+    └── stage2/
+        ├── 10-ywd-headless
+        ├── 15-ywd-network
+        ├── 20-ywd-runtime
+        ├── 25-ywd-firstboot
+        └── 27-ywd-polish
+```
+
+The pi-gen stages contain OS-specific boot/network/setup integration. Current application and presentation assets are injected by the builder from the repository root so those components do not drift independently.
+
+## First-boot validation
+
+A candidate image is not a known-good checkpoint until it is physically tested on the target Pi Zero:
+
+1. image builds and XZ integrity passes
+2. Pi boots and OLED reports setup/network state
+3. setup AP appears when no station Wi-Fi exists
+4. Wi-Fi handoff succeeds
+5. secure HTTPS first-boot wizard accepts the OLED code
+6. WebUI loads the current packaged application
+7. BrandMeister and RF operate normally after explicit enable
+8. Parrot/normal traffic succeeds
+9. `ywd-headless-oled.service` is active and `ywd-oled.service` remains inactive
+10. About-page / CLI GitHub application update succeeds without rebuilding the image
+
+See `docs/OS-DEVELOPMENT.md` for the integration/checkpoint workflow.
