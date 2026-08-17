@@ -60,6 +60,7 @@ apt-get install -y --no-install-recommends build-essential git ca-certificates o
 command -v openssl >/dev/null 2>&1 || { echo "[FAIL] openssl is required for YWD settings backups/plugin signatures."; exit 1; }
 
 echo; echo "Installing python dependencies for audio bridge..."
+export JAVA_HOME=/usr/lib/jvm/default-java
 pip3 install --break-system-packages jpype1 websockets
 
 if ! id ywd-hotspot >/dev/null 2>&1; then useradd --system --home /var/lib/ywd-hotspot --create-home --shell /usr/sbin/nologin ywd-hotspot; fi
