@@ -19,7 +19,9 @@ if [[ -d "$SELF/lib/console" ]]; then
 fi
 for f in \
   lib/update_runner.py lib/update_admin.py lib/dashboard_update.py lib/oled.py lib/oled_owner.sh \
-  web/update.js web/update.css systemd/ywd-update.service; do
+  web/update.js web/update.css web/update-progress.js \
+  web/instrumentation.js web/instrumentation-bootstrap.js web/instrumentation.css \
+  systemd/ywd-update.service; do
   [[ -f "$SELF/$f" ]] || { echo "[FAIL] Update source missing $f" >&2; exit 1; }
 done
 python3 -m py_compile "$SELF/lib/update_runner.py" "$SELF/lib/update_admin.py" "$SELF/lib/dashboard_update.py" "$SELF/lib/oled.py"
@@ -30,11 +32,6 @@ CORE="$SELF/UPDATE-core.sh"
 [[ -f "$CORE" ]] || CORE="/opt/ywd-hotspot/repo/UPDATE-core.sh"
 [[ -f "$CORE" ]] || { echo "[FAIL] Updater core not found." >&2; exit 1; }
 
-# Run the established updater first. On M4 OS images the core temporarily
-# installs admin.py at ywd-hotspot-admin while it performs its normal migration
-# and init-applied work. After a successful update, restore the tested M4
-# dispatcher layout so setup-finish and software updates remain isolated behind
-# their dedicated privileged helpers.
 if declare -F ywd_run_colored >/dev/null; then
   ywd_run_colored bash "$CORE" "$@"
 else
@@ -55,8 +52,6 @@ if [[ -f "$SELF/lib/admin_dispatch.sh" && -f "$SELF/lib/setup_admin.py" ]]; then
   sudo systemctl daemon-reload
 fi
 
-# Apply the same console/login identity used by YWD-Hotspot OS images. The
-# helper records the host's previous issue/MOTD state so uninstall can restore it.
 if [[ -f "$SELF/lib/system_branding.sh" ]]; then
   sudo bash "$SELF/lib/system_branding.sh" install "$SELF"
 fi
