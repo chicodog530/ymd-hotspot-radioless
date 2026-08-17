@@ -60,8 +60,12 @@ lib/oled.py
 lib/oled_owner.sh
 lib/plugin_admin.py
 lib/plugin_manager.py
+lib/plugin_service_manager.py
 lib/plugin_packages/system-info/config.schema.json
 lib/plugin_packages/system-info/plugin.json
+lib/service_plugin_packages/service-heartbeat/config.schema.json
+lib/service_plugin_packages/service-heartbeat/plugin.json
+lib/service_plugin_packages/service-heartbeat/service.py
 lib/setup_admin.py
 lib/setup_entry.sh
 lib/setup_server.py
@@ -78,6 +82,7 @@ systemd/ywd-dmrid-update.service
 systemd/ywd-dmrid-update.timer
 systemd/ywd-mmdvmhost.service
 systemd/ywd-oled.service
+systemd/ywd-plugin@.service
 systemd/ywd-setup.service
 systemd/ywd-update.service
 web/app-core.js
