@@ -139,10 +139,14 @@
              dom.activityBadge.classList.remove('active');
           }
         } else if (event.data instanceof ArrayBuffer) {
-           // Incoming PCM audio
            if (dom.mute.checked) return;
            playAudio(event.data);
         }
+      };
+
+      ws.onerror = (err) => {
+        console.error("WebSocket error:", err);
+        alert("Could not connect to the backend audio bridge. Is the service running?");
       };
 
       ws.onclose = () => {
