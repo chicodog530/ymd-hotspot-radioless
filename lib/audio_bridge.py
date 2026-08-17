@@ -111,7 +111,7 @@ class AudioBridge:
             now = asyncio.get_event_loop().time()
             if now - last_ping > 5:
                 # Send DMR ping
-                sock.sendto(login_pkt, (host, port))
+                sock.sendto(b"DMRP", (host, port))
                 last_ping = now
                 
             try:
