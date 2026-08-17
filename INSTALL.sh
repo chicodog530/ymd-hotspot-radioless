@@ -16,6 +16,7 @@ if [[ -d "$SELF/lib/console" ]]; then
     bash -n "$SELF/lib/console/$f"
   done
 fi
+python3 -m py_compile "$SELF/lib/update_runner.py" "$SELF/lib/update_admin.py"
 [[ -f "$SELF/lib/system_branding.sh" ]] && bash -n "$SELF/lib/system_branding.sh"
 
 CORE="$SELF/INSTALL-core.sh"
@@ -25,6 +26,19 @@ if declare -F ywd_run_colored >/dev/null; then
   ywd_run_colored bash "$CORE" "$@"
 else
   bash "$CORE" "$@"
+fi
+
+# Install the same narrow dispatcher/helper layout used by the appliance image.
+# Generic installs never activate first-boot setup because they lack the M4 gate.
+if [[ -f "$SELF/lib/admin_dispatch.sh" && -f "$SELF/lib/setup_admin.py" ]]; then
+  sudo install -o root -g root -m 0755 "$SELF/lib/admin.py" /usr/local/libexec/ywd-hotspot-admin-core
+  sudo install -o root -g root -m 0755 "$SELF/lib/setup_admin.py" /usr/local/libexec/ywd-hotspot-setup-admin
+  sudo install -o root -g root -m 0755 "$SELF/lib/update_admin.py" /usr/local/libexec/ywd-hotspot-update-admin
+  sudo install -o root -g root -m 0755 "$SELF/lib/update_runner.py" /usr/local/libexec/ywd-update-runner
+  sudo install -o root -g root -m 0755 "$SELF/lib/admin_dispatch.sh" /usr/local/libexec/ywd-hotspot-admin
+  sudo install -o root -g root -m 0440 "$SELF/sudoers/ywd-hotspot" /etc/sudoers.d/ywd-hotspot
+  command -v visudo >/dev/null 2>&1 && sudo visudo -cf /etc/sudoers.d/ywd-hotspot >/dev/null
+  sudo systemctl daemon-reload
 fi
 
 # Give both fresh installs and GitHub-adopted installs the same YWD console
