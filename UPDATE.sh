@@ -33,3 +33,9 @@ if [[ -f "$SELF/lib/admin_dispatch.sh" && -f "$SELF/lib/setup_admin.py" ]]; then
     sudo visudo -cf /etc/sudoers.d/ywd-hotspot >/dev/null
   fi
 fi
+
+# Apply the same console/login identity used by YWD-Hotspot OS images. The
+# helper records the host's previous issue/MOTD state so uninstall can restore it.
+if [[ -f "$SELF/lib/system_branding.sh" ]]; then
+  sudo bash "$SELF/lib/system_branding.sh" install "$SELF"
+fi
