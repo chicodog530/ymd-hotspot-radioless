@@ -32,6 +32,13 @@ CORE="$SELF/UPDATE-core.sh"
 [[ -f "$CORE" ]] || CORE="/opt/ywd-hotspot/repo/UPDATE-core.sh"
 [[ -f "$CORE" ]] || { echo "[FAIL] Updater core not found." >&2; exit 1; }
 
+# YWD-Hotspot OS already has one authoritative OLED owner. Ensure the legacy
+# app unit is off before the core updater captures service state so it cannot be
+# restarted alongside ywd-headless-oled during this transition.
+if sudo systemctl cat ywd-headless-oled.service >/dev/null 2>&1; then
+  sudo systemctl disable --now ywd-oled.service >/dev/null 2>&1 || true
+fi
+
 if declare -F ywd_run_colored >/dev/null; then
   ywd_run_colored bash "$CORE" "$@"
 else
@@ -56,9 +63,8 @@ if [[ -f "$SELF/lib/system_branding.sh" ]]; then
   sudo bash "$SELF/lib/system_branding.sh" install "$SELF"
 fi
 
-# YWD-Hotspot OS already owns the physical display with ywd-headless-oled.
-# Point that one daemon at the unified renderer and keep ywd-oled disabled.
-# Generic installs continue using the normal app OLED unit.
+# Point the sole OS OLED owner at the unified renderer. Generic installs have
+# no headless unit, so this helper is a no-op there.
 if [[ -f "$SELF/lib/oled_owner.sh" ]]; then
   sudo bash "$SELF/lib/oled_owner.sh" install "$SELF"
 fi
