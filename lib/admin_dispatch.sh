@@ -8,6 +8,9 @@ case "${1:-}" in
   update-check|update-start|set-hotspot-password|config-apply|config-revert|service-restart)
     exec /usr/local/libexec/ywd-hotspot-update-admin "$@"
     ;;
+  plugin-system-set|plugin-set|plugin-config-save)
+    exec /usr/bin/python3 /opt/ywd-hotspot/app/lib/plugin_admin.py "$@"
+    ;;
   *)
     exec /usr/local/libexec/ywd-hotspot-admin-core "$@"
     ;;
