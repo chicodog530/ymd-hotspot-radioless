@@ -8,6 +8,17 @@ if declare -F ywd_banner >/dev/null; then
   ywd_info "Configuration, credentials and calibration data are preserved."
   ywd_info "MMDVM-Host / DMRGateway are not recompiled by normal app updates."
 fi
+
+# Nested console helpers are installed after the core updater returns, so check
+# them here before any live service/config work begins.
+if [[ -d "$SELF/lib/console" ]]; then
+  python3 -m py_compile "$SELF/lib/console/ywd-system-info.py"
+  for f in ywd-info-wrapper.sh ywd-logs.sh ywd-env.sh ywd-prompt.sh ywd-motd.sh; do
+    bash -n "$SELF/lib/console/$f"
+  done
+fi
+[[ -f "$SELF/lib/system_branding.sh" ]] && bash -n "$SELF/lib/system_branding.sh"
+
 CORE="$SELF/UPDATE-core.sh"
 [[ -f "$CORE" ]] || CORE="/opt/ywd-hotspot/repo/UPDATE-core.sh"
 [[ -f "$CORE" ]] || { echo "[FAIL] Updater core not found." >&2; exit 1; }
