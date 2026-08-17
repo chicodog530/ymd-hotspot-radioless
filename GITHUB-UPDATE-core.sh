@@ -57,8 +57,6 @@ case "$origin" in
   *) echo "[FAIL] Refusing update: unexpected origin '$origin'"; exit 1;;
 esac
 
-# The managed source tree should never be modified by installer/updater chmods.
-# Ignore executable-bit-only drift while continuing to refuse content changes.
 git -C "$REPO_DIR" config core.fileMode false
 if [[ -n "$(git -C "$REPO_DIR" status --porcelain 2>/dev/null)" ]]; then
   echo "[FAIL] $REPO_DIR has local content modifications. Refusing to overwrite them."
@@ -133,18 +131,19 @@ required=(
   GITHUB-UPDATE.sh GITHUB-UPDATE-core.sh MIGRATE-TO-GITHUB.sh MIGRATE-TO-GITHUB-core.sh
   bin/ywd-hotspotctl bin/ywd-hotspotctl-core bin/ywd-ui.sh lab/mmdvm-diag.sh
   lib/dashboard.py lib/dashboard_core.py lib/dashboard_update.py lib/admin.py lib/update_admin.py lib/update_runner.py
-  lib/build_info.py lib/generate-config.py lib/migrate.py
+  lib/build_info.py lib/generate-config.py lib/migrate.py lib/config_model.py lib/oled.py lib/oled_owner.sh
   web/index.html web/app.js web/app-core.js web/talkgroups.js web/ui-polish.js web/ui-polish.css web/style.css
   web/update.js web/update.css web/update-progress.js
+  web/instrumentation.js web/instrumentation-bootstrap.js web/instrumentation.css
   sudoers/ywd-hotspot systemd/ywd-mmdvmhost.service systemd/ywd-dmrgateway.service
-  systemd/ywd-dashboard.service systemd/ywd-activity.service systemd/ywd-update.service
+  systemd/ywd-dashboard.service systemd/ywd-activity.service systemd/ywd-oled.service systemd/ywd-update.service
   assets/branding/ywd-hotspot-badge-256.webp
 )
 for f in "${required[@]}"; do
   [[ -e "$stage/$f" ]] || { echo "[FAIL] Candidate is missing required file: $f"; exit 1; }
 done
 
-for f in UPDATE.sh UPDATE-core.sh INSTALL.sh INSTALL-core.sh GITHUB-UPDATE.sh GITHUB-UPDATE-core.sh MIGRATE-TO-GITHUB.sh MIGRATE-TO-GITHUB-core.sh UNINSTALL.sh bin/ywd-hotspotctl bin/ywd-hotspotctl-core bin/ywd-ui.sh lab/mmdvm-diag.sh; do
+for f in UPDATE.sh UPDATE-core.sh INSTALL.sh INSTALL-core.sh GITHUB-UPDATE.sh GITHUB-UPDATE-core.sh MIGRATE-TO-GITHUB.sh MIGRATE-TO-GITHUB-core.sh UNINSTALL.sh bin/ywd-hotspotctl bin/ywd-hotspotctl-core bin/ywd-ui.sh lab/mmdvm-diag.sh lib/oled_owner.sh; do
   [[ -f "$stage/$f" ]] && bash -n "$stage/$f"
 done
 python3 -m py_compile "$stage"/lib/*.py
@@ -170,7 +169,6 @@ YWD_GIT_COMMIT_DATE="$target_date" \
 YWD_UPDATE_CHANNEL="$next_channel" \
   bash "$stage/UPDATE.sh"
 
-# Move the managed source checkout only after the live update succeeds.
 if [[ -n "$TAG" ]]; then
   git -C "$REPO_DIR" checkout --quiet --detach "$target_sha"
 else
