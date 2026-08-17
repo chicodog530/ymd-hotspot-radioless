@@ -9,6 +9,8 @@ Cmnd_Alias YWDHOTSPOT_ADMIN = \
  /usr/local/libexec/ywd-hotspot-admin set-bm-api-key, \
  /usr/local/libexec/ywd-hotspot-admin set-web-password, \
  /usr/local/libexec/ywd-hotspot-admin setup-finish, \
+ /usr/local/libexec/ywd-hotspot-admin update-check, \
+ /usr/local/libexec/ywd-hotspot-admin update-start, \
  /usr/local/libexec/ywd-hotspot-admin rf-start, \
  /usr/local/libexec/ywd-hotspot-admin rf-stop, \
  /usr/local/libexec/ywd-hotspot-admin rf-restart, \
