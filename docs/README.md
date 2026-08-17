@@ -15,6 +15,7 @@
 | 🔄 Check/apply updates or switch `main` / `dev` | **[Upgrading](UPGRADING.md)** |
 | 🛠️ Recover from an update/migration problem | **[Upgrading](UPGRADING.md#-recovery-and-rollback)** |
 | 📻 Manage BrandMeister static/dynamic talkgroups | **[Talkgroup Manager](TALKGROUPS.md)** |
+| 📟 Configure LIVE DMR gauges and OLED runtime display | **[Display + Instrumentation](DISPLAY.md)** |
 | 🧪 Calibrate RXOffset with BER measurements | **[Calibration](CALIBRATION.md)** |
 | 🧱 Understand the RF/runtime architecture | **[Architecture](ARCHITECTURE.md)** |
 | 🌿 Understand branches, source layout, and dev checks | **[GitHub / Development](GITHUB-SETUP.md)** |
@@ -31,6 +32,8 @@ A few project rules show up everywhere because they are intentional design const
 - `/opt/ywd-hotspot/repo` is managed source; `/opt/ywd-hotspot/app` is deployed runtime.
 - reusable credentials stay out of browser-readable data and public diagnostics.
 - the dashboard/OLED/activity services stay outside the DMR-critical path.
+- on YWD-Hotspot OS, one authoritative OLED daemon owns the SSD1306/I2C device.
+- enhanced WebUI instrumentation is optional; Basic mode preserves the lightweight status UI.
 - the original Raspberry Pi Zero W remains the performance budget.
 
 ## 🌿 Branch model
