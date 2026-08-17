@@ -17,5 +17,6 @@
   }
   loadStyle('/ui-polish.css?v=alpha10');
   loadStyle('/update.css?v=progress2');
-  load('/app-core.js', () => load('/talkgroups.js', () => load('/ui-polish.js?v=alpha10', () => load('/update.js?v=about-update1', () => load('/update-progress.js?v=progress2')))));
+  loadStyle('/instrumentation.css?v=alpha12');
+  load('/app-core.js', () => load('/talkgroups.js', () => load('/ui-polish.js?v=alpha10', () => load('/update.js?v=about-update1', () => load('/update-progress.js?v=progress2', () => load('/instrumentation.js?v=alpha12', () => load('/instrumentation-bootstrap.js?v=alpha12')))))));
 })();
