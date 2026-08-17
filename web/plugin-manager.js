@@ -42,7 +42,7 @@
       delete button.dataset.pluginBusy;
       button.classList.remove('ywd-working');
       button.removeAttribute('aria-busy');
-      button.textContent = previous;
+      if (!label || button.textContent === label) button.textContent = previous;
     };
   }
 
