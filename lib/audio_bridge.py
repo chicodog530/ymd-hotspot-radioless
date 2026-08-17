@@ -53,7 +53,8 @@ class AudioBridge:
             
         logging.info("Starting JVM and loading JMBE...")
         if not jpype.isJVMStarted():
-            jpype.startJVM(classpath=[JMBE_JAR_PATH])
+            jvm_path = "/usr/lib/jvm/java-21-openjdk-armhf/lib/client/libjvm.so"
+            jpype.startJVM(jvm_path, "-client", classpath=[JMBE_JAR_PATH])
             
         try:
             JMBEAudioLibrary = jpype.JClass("jmbe.JMBEAudioLibrary")
