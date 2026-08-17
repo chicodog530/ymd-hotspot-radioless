@@ -21,6 +21,7 @@ Cmnd_Alias YWDHOTSPOT_ADMIN = \
  /usr/local/libexec/ywd-hotspot-admin calibration-baseline-restore, \
  /usr/local/libexec/ywd-hotspot-admin plugin-system-set, \
  /usr/local/libexec/ywd-hotspot-admin plugin-set, \
- /usr/local/libexec/ywd-hotspot-admin plugin-config-save
+ /usr/local/libexec/ywd-hotspot-admin plugin-config-save, \
+ /usr/local/libexec/ywd-hotspot-admin plugin-runtime
 
 ywd-hotspot ALL=(root) NOPASSWD: YWDHOTSPOT_ADMIN
