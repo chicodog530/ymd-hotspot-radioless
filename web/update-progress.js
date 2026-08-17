@@ -33,11 +33,10 @@
         </div>
         <div class="update-progress-meter-row">
           <div class="update-progress-track" role="progressbar" aria-label="Software update progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-            <div id="updateProgressFill" class="update-progress-fill"></div>
+            <div id="updateProgressFill" class="update-progress-fill" data-progress="0"></div>
           </div>
           <b id="updateProgressPercent">0%</b>
         </div>
-        <p class="hint update-progress-note">Progress is stage-driven: the bar advances only when the updater reaches a verified milestone.</p>
         <div id="updateProgressTarget" class="update-progress-target"></div>
         <div class="buttonrow update-progress-actions">
           <button class="btn" id="closeUpdateProgress" hidden>CLOSE</button>
@@ -71,7 +70,7 @@
     lastProgress = Math.max(lastProgress, pct);
     const track = document.querySelector('#updateProgressModal .update-progress-track');
     const fill = el('updateProgressFill');
-    if (fill) fill.style.width = `${lastProgress}%`;
+    if (fill) fill.dataset.progress = String(Math.round(lastProgress / 5) * 5);
     if (track) track.setAttribute('aria-valuenow', String(Math.round(lastProgress)));
     if (el('updateProgressPercent')) el('updateProgressPercent').textContent = `${Math.round(lastProgress)}%`;
   }
@@ -170,8 +169,6 @@
     armedAt = Date.now();
     lastProgress = 0;
     startPolling();
-    // If the start request fails, the main update UI reports the error. Stop
-    // waiting for a job that never entered running state after a short grace period.
     setTimeout(() => {
       const modal = el('updateProgressModal');
       if (armedAt && (!modal || !modal.classList.contains('on'))) {
