@@ -11,6 +11,9 @@ Plugin API v1 is intentionally small and fail-closed. It exists to prove plugin 
 - Plugin support is **globally disabled by default** when no plugin state file exists.
 - The **Plugin Manager is trusted YWD-Hotspot core**, not a plugin.
 - Disabling the plugin subsystem leaves the normal DMR appliance untouched.
+- **Master OFF is authoritative:** all active plugins are stopped/unloaded before the disabled state is committed, then every per-plugin activation flag is cleared.
+- Re-enabling the plugin subsystem does **not** silently reactivate plugins that were active before master disable; each plugin must be explicitly enabled again.
+- Plugin configuration is preserved when a plugin or the entire subsystem is disabled.
 - Plugin packages do not modify the canonical `/etc/ywd-hotspot/config.json`.
 - Plugin subsystem state is stored in `/etc/ywd-hotspot/plugin-state.json`.
 - Per-plugin configuration is stored under `/etc/ywd-hotspot/plugins/`.
@@ -48,8 +51,9 @@ The trusted WebUI adds a **PLUGINS** section with:
 - per-plugin enable/disable
 - schema-rendered configuration
 - a controlled test action
+- YWD-styled confirmation dialogs for destructive plugin disable actions
 
-When the master switch is disabled, installed package metadata may still be displayed by the core Plugin Manager, but plugins are not active.
+When the master switch is disabled, installed package metadata and configuration may still be displayed by the core Plugin Manager, but plugin enable/disable and test controls are inert. All plugin activation state is OFF; there is no armed/inactive intermediate state.
 
 ## Reference plugin: System Info Test
 
