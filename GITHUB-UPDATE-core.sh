@@ -19,7 +19,7 @@ Usage: GITHUB-UPDATE.sh [--check|--dry-run] [--branch NAME|--tag TAG]
 
   --check       Fetch metadata and report whether an update is available.
   --dry-run     Fetch and validate the candidate without changing the live install.
-  --branch NAME Update from a branch. A successful main/dev update becomes the saved channel.
+  --branch NAME Update from a branch. A successful main/dev/dev-plugins update becomes the saved channel.
   --tag TAG     Update to a specific tag without changing the saved update channel.
 
 With no --branch/--tag, the saved update channel is used. If no channel file
@@ -67,10 +67,10 @@ fi
 saved_channel=""
 if [[ -r "$CHANNEL_FILE" ]]; then
   saved_channel="$(tr -d '[:space:]' < "$CHANNEL_FILE" 2>/dev/null || true)"
-  case "$saved_channel" in main|dev) ;; *) saved_channel="";; esac
+  case "$saved_channel" in main|dev|dev-plugins) ;; *) saved_channel="";; esac
 fi
 checkout_branch="$(git -C "$REPO_DIR" branch --show-current 2>/dev/null || true)"
-case "$checkout_branch" in main|dev) ;; *) checkout_branch="";; esac
+case "$checkout_branch" in main|dev|dev-plugins) ;; *) checkout_branch="";; esac
 if [[ -z "$TAG" && "$BRANCH_EXPLICIT" == 0 ]]; then
   BRANCH="${saved_channel:-${checkout_branch:-main}}"
 fi
@@ -174,7 +174,7 @@ if [[ -n "$TAG" ]]; then
 else
   git -C "$REPO_DIR" checkout --quiet -B "$BRANCH" "$target_sha"
   git -C "$REPO_DIR" branch --set-upstream-to="origin/$BRANCH" "$BRANCH" >/dev/null 2>&1 || true
-  if [[ "$BRANCH" == "main" || "$BRANCH" == "dev" ]]; then
+  if [[ "$BRANCH" == "main" || "$BRANCH" == "dev" || "$BRANCH" == "dev-plugins" ]]; then
     tmp_channel="${CHANNEL_FILE}.tmp"
     printf '%s\n' "$BRANCH" > "$tmp_channel"
     chmod 0644 "$tmp_channel"
