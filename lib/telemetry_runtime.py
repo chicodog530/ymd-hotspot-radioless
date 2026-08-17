@@ -64,7 +64,20 @@ def ensure_runtime():
 
     run(["systemctl", "daemon-reload"])
     run(["systemctl", "enable", "--now", "ywd-mqtt.service"])
-    run(["systemctl", "enable", "--now", "ywd-mmdvm-telemetry.service"])
+
+    # Application updates replace the bridge Python on disk while an already
+    # running process would otherwise keep executing the previous build from
+    # memory. Enable it for boot, then restart an existing bridge so the live
+    # process always matches the newly installed application tree. First-time
+    # installs simply start it. Session history is intentionally runtime-only.
+    telemetry_was_active = active("ywd-mmdvm-telemetry.service")
+    run(["systemctl", "enable", "ywd-mmdvm-telemetry.service"])
+    if telemetry_was_active:
+        run(["systemctl", "restart", "ywd-mmdvm-telemetry.service"])
+    else:
+        run(["systemctl", "start", "ywd-mmdvm-telemetry.service"])
+    if not active("ywd-mmdvm-telemetry.service"):
+        raise RuntimeError("YWD MMDVM telemetry bridge is not active after reconciliation")
 
     # MMDVM-Host opens MQTT only during startup. If RF is already running,
     # perform one controlled restart now that the broker is available. If the
