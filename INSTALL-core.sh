@@ -59,7 +59,7 @@ apt-get install -y --no-install-recommends build-essential git ca-certificates l
 [[ -r /usr/include/nlohmann/json.hpp ]] || { echo "[FAIL] nlohmann/json.hpp missing."; exit 1; }
 
 echo; echo "Installing python dependencies for audio bridge..."
-pip3 install jpype1 websockets
+pip3 install --break-system-packages jpype1 websockets
 
 if ! id ywd-hotspot >/dev/null 2>&1; then useradd --system --home /var/lib/ywd-hotspot --create-home --shell /usr/sbin/nologin ywd-hotspot; fi
 for g in dialout i2c systemd-journal; do getent group "$g" >/dev/null 2>&1 && usermod -a -G "$g" ywd-hotspot || true; done
