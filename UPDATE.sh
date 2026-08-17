@@ -45,6 +45,18 @@ else
   bash "$CORE" "$@"
 fi
 
+# Persist first-party update channels from the invoking GitHub updater. This is
+# intentionally done by the incoming candidate so an older main/dev-only updater
+# can bootstrap an appliance onto dev-plugins in one explicit branch update.
+case "${YWD_UPDATE_CHANNEL:-}" in
+  main|dev|dev-plugins)
+    printf '%s\n' "$YWD_UPDATE_CHANNEL" | sudo tee /etc/ywd-hotspot/update-channel.tmp >/dev/null
+    sudo chmod 0644 /etc/ywd-hotspot/update-channel.tmp
+    sudo chown root:root /etc/ywd-hotspot/update-channel.tmp 2>/dev/null || true
+    sudo mv -f /etc/ywd-hotspot/update-channel.tmp /etc/ywd-hotspot/update-channel
+    ;;
+esac
+
 if [[ -f "$SELF/lib/admin_dispatch.sh" && -f "$SELF/lib/setup_admin.py" ]]; then
   sudo install -o root -g root -m 0755 "$SELF/lib/admin.py" /usr/local/libexec/ywd-hotspot-admin-core
   sudo install -o root -g root -m 0755 "$SELF/lib/setup_admin.py" /usr/local/libexec/ywd-hotspot-setup-admin
