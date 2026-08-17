@@ -10,9 +10,21 @@ from urllib.parse import parse_qs, urlparse
 import dashboard_core as core
 
 TG_CACHE = core.VAR / "talkgroup-directory.json"
+SETUP_STATE = core.VAR / "setup-state.json"
+M4_GATE = core.Path("/etc/ywd-hotspot/m4-safety.txt")
 TG_TTL = 24 * 3600
 TG_LOCK = threading.Lock()
 TG_MEM = {"rows": None, "cached_at": 0.0, "stale": True, "error": None}
+
+
+def setup_required():
+    if not M4_GATE.is_file():
+        return False
+    try:
+        doc = json.loads(SETUP_STATE.read_text())
+        return not (isinstance(doc, dict) and doc.get("state") == "complete")
+    except Exception:
+        return True
 
 
 def _tg_id(value):
@@ -184,6 +196,12 @@ class H(core.H):
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
+        if path in ("/", "/index.html") and setup_required():
+            self.send_response(302)
+            self.send_header("Location", "https://ywd-hotspot.local:8443/")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            return
         if path == "/app-core.js":
             self.serve_static("app-core.js", "application/javascript; charset=utf-8")
             return
