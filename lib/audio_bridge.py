@@ -97,7 +97,10 @@ class AudioBridge:
         sock.setblocking(False)
         
         # Login to local DMRGateway (simulating MMDVMHost)
-        login_pkt = b"DMRD" + struct.pack("!I", self.dmr_id) + self.callsign.encode().ljust(8, b'\0') + b'\0'*12
+        # MMDVM protocol login is ~280 bytes. Callsign is space-padded.
+        callsign_bytes = self.callsign.encode('ascii').ljust(8, b' ')
+        login_pkt = b"DMRD" + struct.pack("!I", self.dmr_id) + callsign_bytes
+        login_pkt = login_pkt.ljust(280, b'\x00')
         logging.info(f"Connecting to DMRGateway at {host}:{port}...")
         sock.sendto(login_pkt, (host, port))
         
