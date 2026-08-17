@@ -11,6 +11,7 @@
 | I want to… | Guide |
 |---|---|
 | 🚀 Install a new hotspot | **[Installation](INSTALL.md)** |
+| 🧱 Build a complete YWD-Hotspot OS image | **[OS Development](OS-DEVELOPMENT.md)** |
 | 🔁 Move an older archive install to GitHub | **[Installation](INSTALL.md#-existing-install--github-management)** |
 | 🔄 Check/apply updates or switch `main` / `dev` | **[Upgrading](UPGRADING.md)** |
 | 🛠️ Recover from an update/migration problem | **[Upgrading](UPGRADING.md#-recovery-and-rollback)** |
@@ -35,16 +36,18 @@ A few project rules show up everywhere because they are intentional design const
 - on YWD-Hotspot OS, one authoritative OLED daemon owns the SSD1306/I2C device.
 - enhanced WebUI instrumentation is optional; Basic mode preserves the lightweight status UI.
 - the original Raspberry Pi Zero W remains the performance budget.
+- the OS builder packages the application from the same repository commit; normal app updates do not require rebuilding an image.
 
 ## 🌿 Branch model
 
 | Branch | Purpose |
 |---|---|
 | `main` | promoted/conservative project line |
-| `dev` | active development and Pi test line |
-| `dev-alpha9.2-known-good` | checkpoint of the user-tested Alpha9.2 polish build |
+| `dev` | active application development and Pi test line |
+| `dev-alpha12.1-known-good` | proven Alpha12.1 checkpoint |
+| temporary `dev-os-*` branches | image-builder/OS integration cut from current `dev`, then merged back after physical validation |
 
-The installed appliance remembers its selected update channel. See **[Upgrading](UPGRADING.md)**.
+The historical long-lived `dev-os` branch is retained as reference; do not merge it wholesale into current `dev`. The installed appliance remembers its selected `main`/`dev` application update channel. See **[Upgrading](UPGRADING.md)** and **[OS Development](OS-DEVELOPMENT.md)**.
 
 ## 🆘 Useful first commands
 
