@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Narrow privileged bridge for authenticated WebUI software updates."""
+"""Narrow privileged bridge for authenticated WebUI software updates/security."""
 from __future__ import annotations
 
 import json
@@ -25,6 +25,19 @@ SERVICE = "ywd-update.service"
 def run(args, timeout=30):
     return subprocess.run(args, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                           timeout=timeout, check=False)
+
+
+def payload():
+    raw = sys.stdin.buffer.read(131072)
+    if not raw:
+        return {}
+    try:
+        obj = json.loads(raw.decode("utf-8"))
+    except Exception:
+        raise ValueError("invalid JSON payload")
+    if not isinstance(obj, dict):
+        raise ValueError("payload must be an object")
+    return obj
 
 
 def pending_config():
@@ -83,6 +96,17 @@ def update_start():
     return {"ok": True, "started": True, **check}
 
 
+def set_hotspot_password(data):
+    pw = str(data.get("password", ""))
+    if not pw:
+        raise ValueError("Hotspot Security password cannot be empty")
+    if len(pw) > 20:
+        raise ValueError("BrandMeister Hotspot Security password must be 20 characters or fewer")
+    if any(ch in pw for ch in ('"', "\n", "\r")):
+        raise ValueError("Hotspot Security password contains an unsupported character")
+    return core_admin.set_hotspot_password(data)
+
+
 def main():
     if os.geteuid() != 0:
         raise SystemExit("ywd-hotspot-update-admin must run as root")
@@ -93,6 +117,8 @@ def main():
         out = update_check()
     elif action == "update-start":
         out = update_start()
+    elif action == "set-hotspot-password":
+        out = set_hotspot_password(payload())
     else:
         raise ValueError("unsupported update admin action")
     print(json.dumps(out, separators=(",", ":")))
