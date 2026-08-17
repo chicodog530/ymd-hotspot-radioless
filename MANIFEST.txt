@@ -92,6 +92,7 @@ web/index.html
 web/instrumentation-bootstrap.js
 web/instrumentation.css
 web/instrumentation.js
+web/plugin-config-actions.js
 web/plugin-manager.css
 web/plugin-manager.js
 web/style.css
