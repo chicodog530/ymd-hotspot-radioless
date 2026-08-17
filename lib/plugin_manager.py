@@ -62,12 +62,17 @@ def read_state():
     raw = _read_json(STATE, {})
     if not isinstance(raw, dict):
         return default_state()
+    system_enabled = bool(raw.get("enabled", False))
     plugins = raw.get("plugins") if isinstance(raw.get("plugins"), dict) else {}
     clean = {}
     for key, value in plugins.items():
         if ID_RE.fullmatch(str(key)) and isinstance(value, dict):
-            clean[str(key)] = {"enabled": bool(value.get("enabled", False))}
-    return {"schema": 1, "enabled": bool(raw.get("enabled", False)), "plugins": clean}
+            # Master OFF is authoritative. Alpha13 briefly preserved per-plugin
+            # desired state while the subsystem was disabled; normalize that old
+            # state fail-closed so re-enabling the subsystem never auto-reactivates
+            # a plugin that was active before the master switch was turned off.
+            clean[str(key)] = {"enabled": bool(value.get("enabled", False)) if system_enabled else False}
+    return {"schema": 1, "enabled": system_enabled, "plugins": clean}
 
 
 def _safe_child(directory, filename):
