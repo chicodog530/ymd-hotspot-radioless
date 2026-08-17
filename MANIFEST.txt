@@ -29,6 +29,7 @@ docs/CALIBRATION.md
 docs/DISPLAY.md
 docs/GITHUB-SETUP.md
 docs/INSTALL.md
+docs/PLUGINS.md
 docs/TALKGROUPS.md
 docs/UPGRADING.md
 lab/mmdvm-diag.sh
@@ -49,6 +50,7 @@ lib/console/ywd-prompt.sh
 lib/console/ywd-system-info.py
 lib/dashboard.py
 lib/dashboard_core.py
+lib/dashboard_plugins.py
 lib/dashboard_update.py
 lib/generate-config.py
 lib/health.py
@@ -56,6 +58,10 @@ lib/id-update.py
 lib/migrate.py
 lib/oled.py
 lib/oled_owner.sh
+lib/plugin_admin.py
+lib/plugin_manager.py
+lib/plugin_packages/system-info/config.schema.json
+lib/plugin_packages/system-info/plugin.json
 lib/setup_admin.py
 lib/setup_entry.sh
 lib/setup_server.py
@@ -80,6 +86,8 @@ web/index.html
 web/instrumentation-bootstrap.js
 web/instrumentation.css
 web/instrumentation.js
+web/plugin-manager.css
+web/plugin-manager.js
 web/style.css
 web/talkgroups.js
 web/ui-polish.css
