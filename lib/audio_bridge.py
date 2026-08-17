@@ -6,6 +6,7 @@ import os
 import sys
 import struct
 import configparser
+import glob
 
 try:
     import jpype
@@ -15,14 +16,18 @@ except ImportError:
     print("Missing dependencies. Please run: pip3 install jpype1 websockets")
     sys.exit(1)
 
-import glob
+# Setup logging
+logging.basicConfig(level=logging.INFO)
 
-# Find the built JMBE jar regardless of version number
+# Find the built JMBE jars regardless of version number
+JMBE_API_JAR_PATTERN = os.path.join(os.path.dirname(__file__), "jmbe", "api", "build", "libs", "jmbe-api-*.jar")
 JMBE_JAR_PATTERN = os.path.join(os.path.dirname(__file__), "jmbe", "codec", "build", "libs", "jmbe-*.jar")
 try:
+    JMBE_API_JAR_PATH = glob.glob(JMBE_API_JAR_PATTERN)[0]
     JMBE_JAR_PATH = glob.glob(JMBE_JAR_PATTERN)[0]
+    JMBE_CLASSPATH = [JMBE_API_JAR_PATH, JMBE_JAR_PATH]
 except IndexError:
-    JMBE_JAR_PATH = "/path/not/found.jar"
+    JMBE_CLASSPATH = []
 
 
 class AudioBridge:
@@ -47,14 +52,14 @@ class AudioBridge:
             logging.error(f"Could not load MMDVM-Host.ini, using defaults: {e}")
             
     def start_jvm(self):
-        if not os.path.exists(JMBE_JAR_PATH):
-            logging.error(f"JMBE jar not found at {JMBE_JAR_PATH}")
+        if not JMBE_CLASSPATH:
+            logging.error("JMBE jars not found!")
             sys.exit(1)
             
         logging.info("Starting JVM and loading JMBE...")
         if not jpype.isJVMStarted():
             jvm_path = "/usr/lib/jvm/java-21-openjdk-armhf/lib/client/libjvm.so"
-            jpype.startJVM(jvm_path, classpath=[JMBE_JAR_PATH])
+            jpype.startJVM(jvm_path, classpath=JMBE_CLASSPATH)
             
         try:
             JMBEAudioLibrary = jpype.JClass("jmbe.JMBEAudioLibrary")
