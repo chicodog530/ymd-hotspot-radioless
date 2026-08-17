@@ -55,7 +55,7 @@ PY
 echo; echo "Installing build/runtime dependencies..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y --no-install-recommends build-essential git ca-certificates libmosquitto-dev libmosquitto1 nlohmann-json3-dev python3 python3-pip python3-smbus i2c-tools iw sudo default-jre-headless
+apt-get install -y --no-install-recommends build-essential git ca-certificates libmosquitto-dev libmosquitto1 nlohmann-json3-dev python3 python3-dev python3-pip python3-smbus i2c-tools iw sudo default-jre-headless
 [[ -r /usr/include/nlohmann/json.hpp ]] || { echo "[FAIL] nlohmann/json.hpp missing."; exit 1; }
 
 echo; echo "Installing python dependencies for audio bridge..."
