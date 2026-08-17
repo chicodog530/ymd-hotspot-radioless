@@ -8,6 +8,13 @@ systemctl disable --now ywd-dmrgateway.service ywd-mmdvmhost.service ywd-dashboa
 rm -f /etc/systemd/system/ywd-{dmrgateway,mmdvmhost,dashboard,activity,oled,dmrid-update}.service /etc/systemd/system/ywd-dmrid-update.timer
 rm -f /etc/sudoers.d/ywd-hotspot /usr/local/libexec/ywd-hotspot-admin /usr/local/bin/MMDVM-Host /usr/local/bin/DMRGateway /usr/local/sbin/ywd-hotspotctl
 rm -f /etc/systemd/journald.conf.d/10-ywd-hotspot-persistent.conf
+
+# Restore the host's pre-YWD console/MOTD files and dynamic MOTD executable
+# state before removing the deployed application tree.
+if [[ -f /opt/ywd-hotspot/app/lib/system_branding.sh ]]; then
+  bash /opt/ywd-hotspot/app/lib/system_branding.sh restore /opt/ywd-hotspot/app || true
+fi
+
 systemctl daemon-reload
 systemctl restart systemd-journald.service 2>/dev/null || true
 rm -rf /opt/ywd-hotspot
