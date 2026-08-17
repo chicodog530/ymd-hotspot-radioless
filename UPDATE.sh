@@ -58,6 +58,21 @@ CORE="$SELF/UPDATE-core.sh"
 [[ -f "$CORE" ]] || CORE="/opt/ywd-hotspot/repo/UPDATE-core.sh"
 [[ -f "$CORE" ]] || { echo "[FAIL] Updater core not found." >&2; exit 1; }
 
+repair_live_admin_bridge(){
+  local live=/opt/ywd-hotspot/app
+  [[ -f "$live/lib/admin_dispatch.sh" && -f "$live/lib/admin.py" ]] || return 0
+  sudo install -o root -g root -m 0755 "$live/lib/admin.py" /usr/local/libexec/ywd-hotspot-admin-core
+  [[ -f "$live/lib/setup_admin.py" ]] && sudo install -o root -g root -m 0755 "$live/lib/setup_admin.py" /usr/local/libexec/ywd-hotspot-setup-admin
+  [[ -f "$live/lib/update_admin.py" ]] && sudo install -o root -g root -m 0755 "$live/lib/update_admin.py" /usr/local/libexec/ywd-hotspot-update-admin
+  [[ -f "$live/lib/update_runner.py" ]] && sudo install -o root -g root -m 0755 "$live/lib/update_runner.py" /usr/local/libexec/ywd-update-runner
+  sudo install -o root -g root -m 0755 "$live/lib/admin_dispatch.sh" /usr/local/libexec/ywd-hotspot-admin
+  [[ -f "$live/sudoers/ywd-hotspot" ]] && sudo install -o root -g root -m 0440 "$live/sudoers/ywd-hotspot" /etc/sudoers.d/ywd-hotspot
+  if command -v visudo >/dev/null 2>&1 && [[ -f /etc/sudoers.d/ywd-hotspot ]]; then
+    sudo visudo -cf /etc/sudoers.d/ywd-hotspot >/dev/null
+  fi
+  sudo systemctl daemon-reload
+}
+
 # Capture plugin intent + exact service boot/runtime state before replacing the
 # application. State/config files are not changed here; services are simply made
 # inert for the duration of the core update.
@@ -78,8 +93,8 @@ if sudo systemctl cat ywd-headless-oled.service >/dev/null 2>&1; then
 fi
 
 # Preserve the proven core updater/rollback engine. If it fails, it restores the
-# old app/config first; this wrapper then restores the captured plugin runtime
-# against that restored old application.
+# old app/config first; this wrapper repairs the restored split admin bridge and
+# then restores the captured plugin runtime against that old application.
 set +e
 if declare -F ywd_run_colored >/dev/null; then
   ywd_run_colored bash "$CORE" "$@"
@@ -90,6 +105,8 @@ else
 fi
 set -e
 if (( core_rc != 0 )); then
+  echo "Repairing restored admin bridge after core rollback..."
+  repair_live_admin_bridge || echo "[WARN] Restored admin bridge needs manual review."
   echo "Restoring pre-update plugin runtime after core rollback..."
   sudo python3 "$SELF/lib/plugin_update_safety.py" restore \
     --snapshot "$PLUGIN_UPDATE_SNAPSHOT" --lib /opt/ywd-hotspot/app/lib || \
