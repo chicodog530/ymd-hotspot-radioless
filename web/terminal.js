@@ -146,9 +146,44 @@
     }
   }
 
+  function testAudio() {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 8000 });
+      nextAudioTime = audioCtx.currentTime;
+    }
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    
+    // Create a 1-second 440Hz sine wave buffer at 8000Hz
+    const sampleRate = 8000;
+    const duration = 1.0;
+    const buffer = audioCtx.createBuffer(1, sampleRate * duration, sampleRate);
+    const floatArr = buffer.getChannelData(0);
+    
+    for (let i = 0; i < floatArr.length; i++) {
+        // Sine wave formula: Math.sin(2 * PI * freq * time)
+        // fade in/out to avoid clicks
+        let env = 1.0;
+        if (i < 400) env = i / 400;
+        else if (i > floatArr.length - 400) env = (floatArr.length - i) / 400;
+        floatArr[i] = Math.sin(2 * Math.PI * 440 * (i / sampleRate)) * env * 0.5;
+    }
+    
+    const source = audioCtx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(audioCtx.destination);
+    source.start(audioCtx.currentTime);
+  }
+
   // Events
   dom.connectBtn.addEventListener('click', connectAudio);
   dom.disconnectBtn.addEventListener('click', disconnectAudio);
+  document.getElementById('termTestAudioBtn').addEventListener('click', testAudio);
+  dom.volumeInput.addEventListener('input', (e) => {
+    // We could add a gain node if we wanted
+    console.log("Volume set to", e.target.value);
+  });
 
   // Init
   populateDevices();
