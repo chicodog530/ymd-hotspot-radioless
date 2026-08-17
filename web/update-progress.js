@@ -57,7 +57,12 @@
 
   function relevant(u) {
     if (!u || !u.state || u.state === 'idle' || u.state === 'checked') return false;
-    if (!armedAt) return u.state === 'running';
+    if (!armedAt) {
+      if (u.state !== 'running') return false;
+      const t = statusTime(u);
+      if (t) armedAt = t;
+      return true;
+    }
     return statusTime(u) >= armedAt - 1500;
   }
 
