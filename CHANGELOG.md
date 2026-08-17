@@ -6,9 +6,71 @@ YWD-Hotspot is still alpha software. These are project checkpoints, not a promis
 
 ---
 
-## 0.1.0-alpha10-dev — GitHub + UX Polish
+## 0.1.0-alpha12-dev — Live DMR Instrument Panel + Unified OLED
 
-**Status:** active `dev` build. `0.1.0-alpha9.2-dev` is preserved at `dev-alpha9.2-known-good` after successful mobile/Pi testing.
+**Status:** active `dev` test build. No MMDVM-Host or DMRGateway pin changes are included.
+
+Highlights:
+
+- canonical configuration schema 4
+- existing schema-3 configs normalize forward with conservative display defaults
+- established Basic LIVE DMR status card remains the default/low-overhead mode
+- optional browser-side LIVE DMR instrument panel
+- segmented or smooth RSSI gauge with configurable dBm scale and segment count
+- BER quality gauge with configurable excellent/good/fair thresholds
+- configured TX/RF drive meters
+- peak hold and configurable hold duration
+- rolling RSSI/BER SVG history traces
+- configurable 5/10/20 fps browser rendering target
+- off/subtle/normal/high animation settings and reduced-motion policy
+- Basic, Balanced, Instrument, Maximum Shiny, and Custom presets
+- enhanced panel reuses the existing dashboard status payload; no second server polling loop
+- unavailable RSSI/BER remains unavailable rather than being synthesized
+- dynamic top status-strip RX/TX detail option
+
+OLED/runtime display:
+
+- one shared `lib/oled.py` renderer for generic installs and YWD-Hotspot OS
+- YWD-Hotspot OS keeps `ywd-headless-oled.service` as the sole physical SSD1306/I2C owner
+- `ywd-oled.service` remains disabled on the appliance OS
+- owner transition is serialized during OLED-affecting config apply/revert and manual restart
+- existing boot/network/setup/recovery/shutdown screens retained
+- Basic / Enhanced / Minimal runtime display modes
+- large auto-fit callsign rendering
+- group/private destination display
+- optional cached talkgroup name display
+- local RadioID callsign fallback without OLED-originated Internet requests
+- slot, elapsed, BER, RSSI, and packet-loss toggles
+- configurable post-call hold
+- optional idle-page cycling
+- SSD1306 hardware 0° / 180° rotation
+- update-progress display from the local sanitized update-status file
+- OLED remains a passive presentation service outside the RF-critical path
+
+Update/build safety:
+
+- dashboard now explicitly serves instrumentation JS/CSS assets
+- GitHub candidate manifest requires instrumentation and unified-OLED payload
+- install/update wrappers preflight unified OLED and instrumentation files before live service work
+- uninstall restores the OS headless OLED command/drop-in state
+- display-only configuration changes do not touch the RF stack
+- instrumentation-only configuration changes are treated as dashboard presentation changes
+
+Documentation:
+
+- `README.md` refreshed for Alpha12
+- `docs/DISPLAY.md` added
+- architecture and upgrading docs updated for single OLED ownership, display schema, and WebUI updater/progress behavior
+
+## 0.1.0-alpha11.2-dev — Stage-Driven Update Progress
+
+Added a WebUI software-update progress modal driven by real updater milestones rather than a fake elapsed timer. The detached updater publishes sanitized phase/progress/message state and the browser survives dashboard restart/reconnect during installation.
+
+## 0.1.0-alpha11-dev / alpha11.1-dev — About-Page Self Update
+
+Introduced authenticated About-page update checking/installation, a detached `ywd-update.service`, narrow update admin actions, pending-config/dirty-source guards, managed-refspec repair for legacy single-branch OS checkouts, and the first physically successful WebUI self-update test.
+
+## 0.1.0-alpha10-dev — GitHub + UX Polish
 
 Highlights:
 
