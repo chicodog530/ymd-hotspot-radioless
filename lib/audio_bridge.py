@@ -137,13 +137,29 @@ class AudioBridge:
                                 }))
                         self.last_voice = now
                         
-                        if len(data) >= 15:
+                        ambe_data = None
+                        
+                        # Handle BrandMeister Homebrew (DMRV) which is pre-extracted 27-byte AMBE
+                        if data.startswith(b"DMRV") and len(data) >= 42:
                             ambe_data = data[15:42]
-                            if ambe_data and self.connected_clients:
-                                pcm_floats = self.decode_ambe_to_pcm(ambe_data)
-                                if pcm_floats:
-                                    pcm_bytes = struct.pack(f"<{len(pcm_floats)}f", *pcm_floats)
-                                    websockets.broadcast(self.connected_clients, pcm_bytes)
+                            
+                        # Handle BrandMeister MMDVM (DMRD) which is a 55-byte packet containing a 33-byte RF frame
+                        elif data.startswith(b"DMRD") and len(data) == 55:
+                            try:
+                                import dmr_utils3.decode as dmr
+                                rf_frame = data[22:55]
+                                v = dmr.voice(rf_frame)
+                                ambe_data = v['AMBE'][0].tobytes() + v['AMBE'][1].tobytes() + v['AMBE'][2].tobytes()
+                            except ImportError:
+                                logging.error("dmr_utils3 not installed, cannot decode MMDVM RF frames")
+                            except Exception as e:
+                                logging.error(f"Error extracting AMBE from DMRD: {e}")
+                                
+                        if ambe_data and self.connected_clients:
+                            pcm_floats = self.decode_ambe_to_pcm(ambe_data)
+                            if pcm_floats:
+                                pcm_bytes = struct.pack(f"<{len(pcm_floats)}f", *pcm_floats)
+                                websockets.broadcast(self.connected_clients, pcm_bytes)
             except BlockingIOError:
                 pass
                 
