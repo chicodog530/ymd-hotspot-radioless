@@ -41,7 +41,7 @@ jobs:
           sudo -E env PATH="$PATH" YWD_SYSTEMCTL_LOG="$YWD_SYSTEMCTL_LOG" YWD_LIVE_APP="$YWD_LIVE_APP" YWD_CONFIG="$YWD_CONFIG" bash lib/oled_owner.sh install
           first="$(grep -c '^daemon-reload$' "$tmp/systemctl.log" || true)"
           test "$first" -eq 1
-          : > "$tmp/systemctl.log"
+          sudo truncate -s 0 "$tmp/systemctl.log"
           sudo -E env PATH="$PATH" YWD_SYSTEMCTL_LOG="$YWD_SYSTEMCTL_LOG" YWD_LIVE_APP="$YWD_LIVE_APP" YWD_CONFIG="$YWD_CONFIG" bash lib/oled_owner.sh install
           second="$(grep -c '^daemon-reload$' "$tmp/systemctl.log" || true)"
           test "$second" -eq 0
