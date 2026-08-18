@@ -44,17 +44,17 @@ class AudioBridge:
         self.load_config()
         
     def load_config(self):
-        config = configparser.ConfigParser()
         try:
-            # We assume the config file exists on the Pi
-            config.read("/etc/ywd-hotspot/MMDVM-Host.ini")
-            self.callsign = config.get("General", "Callsign", fallback="NOCALL")
-            self.dmr_id = int(config.get("General", "Id", fallback="0"))
-            self.freq = int(config.get("Modem", "RXFrequency", fallback="433000000"))
-            self.cc = int(config.get("DMR", "ColorCode", fallback="1"))
-            logging.info(f"Loaded config: Callsign={self.callsign}, ID={self.dmr_id}, Freq={self.freq}, CC={self.cc}")
+            with open("/etc/ywd-hotspot/config.json", "r") as f:
+                c = json.load(f)
+            self.bm_master = c.get("brandmeister", {}).get("master", "3102.master.brandmeister.network")
+            self.bm_port = int(c.get("brandmeister", {}).get("port", 62031))
+            self.callsign = c.get("station", {}).get("callsign", "NOCALL")
+            logging.info(f"Loaded config: Callsign={self.callsign}, Master={self.bm_master}:{self.bm_port}")
         except Exception as e:
-            logging.error(f"Could not load MMDVM-Host.ini, using defaults: {e}")
+            logging.error(f"Could not load config.json: {e}")
+            self.bm_master = "3102.master.brandmeister.network"
+            self.bm_port = 62031
             
     def start_jvm(self):
         if not JMBE_CLASSPATH:
@@ -92,63 +92,54 @@ class AudioBridge:
             logging.error(f"Decode error: {e}")
             return None
 
-    async def brandmeister_client(self, host, port):
+    async def brandmeister_proxy(self):
         import socket
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind(("127.0.0.1", 62032))
+        sock.bind(("0.0.0.0", 62035))
         sock.setblocking(False)
         
-        # Login to local DMRGateway (simulating MMDVMHost)
-        # MMDVM protocol login is ~280 bytes. Callsign is space-padded.
-        callsign_bytes = self.callsign.encode('ascii').ljust(8, b' ')
-        login_pkt = bytearray(280)
-        login_pkt[0:4] = b"DMRD"
-        login_pkt[4:8] = struct.pack("!I", self.dmr_id)
-        login_pkt[8:16] = callsign_bytes
-        login_pkt[16:20] = struct.pack("!I", getattr(self, "freq", 433000000))
-        login_pkt[20:24] = struct.pack("!I", getattr(self, "freq", 433000000))
-        login_pkt[24] = 1
-        login_pkt[25] = getattr(self, "cc", 1)
-        login_pkt = login_pkt.ljust(352, b'\x00')
-        logging.info(f"Connecting to DMRGateway at {host}:{port}...")
-        sock.sendto(login_pkt, (host, port))
+        try:
+            bm_ip = socket.gethostbyname(self.bm_master)
+        except Exception:
+            bm_ip = self.bm_master
+        bm_addr = (bm_ip, self.bm_port)
         
-        self.bm_sock = sock
-        self.bm_addr = (host, port)
-        
-        # Send a keep-alive every 5 seconds
-        last_ping = asyncio.get_event_loop().time()
+        dmrgw_addr = None
+        logging.info(f"Audio Bridge Proxy listening on 62035, forwarding to {bm_addr}")
         
         while True:
             now = asyncio.get_event_loop().time()
-            if now - last_ping > 5:
-                # Send DMR ping
-                sock.sendto(b"DMRP", (host, port))
-                last_ping = now
-                
             try:
-                data, addr = sock.recvfrom(1024)
-                if data.startswith(b"DMRD"):
-                    logging.info("DMRGateway Login Accepted!")
-                elif data.startswith(b"DMRV"):
-                    if not self.is_receiving:
-                        self.is_receiving = True
-                        if self.connected_clients:
-                            websockets.broadcast(self.connected_clients, json.dumps({
-                                "type": "rx_start",
-                                "callsign": "Network",
-                                "tg": "Audio"
-                            }))
-                    self.last_voice = now
+                data, addr = sock.recvfrom(2048)
+                if addr[0] == "127.0.0.1":
+                    # From DMRGateway, forward to Brandmeister
+                    dmrgw_addr = addr
+                    sock.sendto(data, bm_addr)
+                else:
+                    # From Brandmeister, forward to DMRGateway
+                    if dmrgw_addr:
+                        sock.sendto(data, dmrgw_addr)
                     
-                    if len(data) >= 15:
-                        ambe_data = data[15:42]
-                        if ambe_data and self.connected_clients:
-                            pcm_floats = self.decode_ambe_to_pcm(ambe_data)
-                            if pcm_floats:
-                                pcm_bytes = struct.pack(f"<{len(pcm_floats)}f", *pcm_floats)
-                                websockets.broadcast(self.connected_clients, pcm_bytes)
+                    # Intercept and decode voice frames
+                    if data.startswith(b"DMRV"):
+                        if getattr(self, "is_receiving", False) == False:
+                            self.is_receiving = True
+                            if self.connected_clients:
+                                websockets.broadcast(self.connected_clients, json.dumps({
+                                    "type": "rx_start",
+                                    "callsign": "Network",
+                                    "tg": "Audio"
+                                }))
+                        self.last_voice = now
+                        
+                        if len(data) >= 15:
+                            ambe_data = data[15:42]
+                            if ambe_data and self.connected_clients:
+                                pcm_floats = self.decode_ambe_to_pcm(ambe_data)
+                                if pcm_floats:
+                                    pcm_bytes = struct.pack(f"<{len(pcm_floats)}f", *pcm_floats)
+                                    websockets.broadcast(self.connected_clients, pcm_bytes)
             except BlockingIOError:
                 pass
                 
@@ -159,7 +150,7 @@ class AudioBridge:
                         "type": "rx_stop"
                     }))
             
-            await asyncio.sleep(0.02)
+            await asyncio.sleep(0.005)
 
     async def handle_client(self, websocket):
         logging.info(f"New Web Terminal connected from {websocket.remote_address}")
@@ -178,8 +169,8 @@ class AudioBridge:
             
     async def serve(self, host="0.0.0.0", port=8081):
         self.start_jvm()
-        # Connect to DMRGateway locally on 62031
-        bm_task = asyncio.create_task(self.brandmeister_client("127.0.0.1", 62031))
+        # Start transparent proxy
+        bm_task = asyncio.create_task(self.brandmeister_proxy())
         
         logging.info(f"Audio Bridge WebSocket listening on ws://{host}:{port}")
         async with websockets.serve(self.handle_client, host, port):
