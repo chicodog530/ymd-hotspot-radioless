@@ -144,12 +144,17 @@ class AudioBridge:
                             ambe_data = data[15:42]
                             
                         # Handle BrandMeister MMDVM (DMRD) which is a 55-byte packet containing a 33-byte RF frame
-                        elif data.startswith(b"DMRD") and len(data) == 55:
+                        elif data.startswith(b"DMRD") and len(data) >= 53:
                             try:
-                                import dmr_utils3.decode as dmr
-                                rf_frame = data[22:55]
-                                v = dmr.voice(rf_frame)
-                                ambe_data = v['AMBE'][0].tobytes() + v['AMBE'][1].tobytes() + v['AMBE'][2].tobytes()
+                                # Byte 15 contains Slot (0x80) and Data/Voice flag (0x40)
+                                is_voice = (data[15] & 0x40) == 0
+                                
+                                if is_voice:
+                                    import dmr_utils3.decode as dmr
+                                    # The MMDVM Homebrew header is 20 bytes long. The 33-byte RF frame starts at byte 20.
+                                    rf_frame = data[20:53]
+                                    v = dmr.voice(rf_frame)
+                                    ambe_data = v['AMBE'][0].tobytes() + v['AMBE'][1].tobytes() + v['AMBE'][2].tobytes()
                             except ImportError:
                                 logging.error("dmr_utils3 not installed, cannot decode MMDVM RF frames")
                             except Exception as e:
