@@ -156,9 +156,17 @@ class AudioBridge:
                                 logging.error(f"Error extracting AMBE from DMRD: {e}")
                                 
                         if ambe_data and self.connected_clients:
-                            pcm_floats = self.decode_ambe_to_pcm(ambe_data)
-                            if pcm_floats:
-                                pcm_bytes = struct.pack(f"<{len(pcm_floats)}f", *pcm_floats)
+                            # A DMR voice burst contains THREE 9-byte AMBE frames (60ms of audio total)
+                            all_pcm_floats = []
+                            for i in range(3):
+                                chunk = ambe_data[i*9 : (i+1)*9]
+                                if len(chunk) == 9:
+                                    pcm_floats = self.decode_ambe_to_pcm(chunk)
+                                    if pcm_floats:
+                                        all_pcm_floats.extend(pcm_floats)
+                            
+                            if all_pcm_floats:
+                                pcm_bytes = struct.pack(f"<{len(all_pcm_floats)}f", *all_pcm_floats)
                                 websockets.broadcast(self.connected_clients, pcm_bytes)
             except BlockingIOError:
                 pass
