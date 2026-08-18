@@ -131,10 +131,11 @@
 
   function disconnectAudio() {
     isConnected = false;
-    isTransmitting = false;
+    stopTransmitting();
     dom.connStatus.textContent = "DISCONNECTED";
     dom.connectBtn.hidden = false;
     dom.disconnectBtn.hidden = true;
+    document.getElementById('termPttBtn').hidden = true;
 
     if (ws) {
       ws.close();
@@ -144,6 +145,74 @@
       audioCtx.close();
       audioCtx = null;
     }
+  }
+
+  let micStream = null;
+  let micSource = null;
+  let scriptNode = null;
+
+  async function startTransmitting() {
+      if (!isConnected || isTransmitting) return;
+      try {
+          micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          if (!audioCtx) return;
+          
+          ws.send(JSON.stringify({ type: "tx_start", tg: dom.tgInput.value }));
+          
+          micSource = audioCtx.createMediaStreamSource(micStream);
+          scriptNode = audioCtx.createScriptProcessor(4096, 1, 1);
+          
+          scriptNode.onaudioprocess = (e) => {
+              if (!isTransmitting) return;
+              const inputData = e.inputBuffer.getChannelData(0);
+              // Send Float32Array directly over WebSocket
+              if (ws && ws.readyState === WebSocket.OPEN) {
+                  ws.send(inputData.buffer);
+              }
+          };
+          
+          micSource.connect(scriptNode);
+          scriptNode.connect(audioCtx.destination);
+          
+          isTransmitting = true;
+          document.getElementById('termPttBtn').style.backgroundColor = "red";
+          document.getElementById('termPttBtn').style.color = "white";
+          document.getElementById('termPttStatus').textContent = "TX ACTIVE";
+          
+      } catch (err) {
+          console.error("Mic error:", err);
+          alert("Microphone access denied.");
+      }
+  }
+
+  function stopTransmitting() {
+      if (!isTransmitting) return;
+      isTransmitting = false;
+      
+      const pttBtn = document.getElementById('termPttBtn');
+      if (pttBtn) {
+          pttBtn.style.backgroundColor = "";
+          pttBtn.style.color = "";
+      }
+      
+      const statusEl = document.getElementById('termPttStatus');
+      if (statusEl) statusEl.textContent = "RX ONLY";
+      
+      if (scriptNode) {
+          scriptNode.disconnect();
+          scriptNode = null;
+      }
+      if (micSource) {
+          micSource.disconnect();
+          micSource = null;
+      }
+      if (micStream) {
+          micStream.getTracks().forEach(t => t.stop());
+          micStream = null;
+      }
+      if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "tx_stop" }));
+      }
   }
 
   function sendControlState() {
@@ -192,7 +261,17 @@
   dom.connectBtn.addEventListener('click', connectAudio);
   dom.disconnectBtn.addEventListener('click', disconnectAudio);
   document.getElementById('termTestAudioBtn').addEventListener('click', testAudio);
-  dom.volumeInput.addEventListener('input', (e) => {
+  
+  const pttBtn = document.getElementById('termPttBtn');
+  if (pttBtn) {
+      pttBtn.addEventListener('mousedown', startTransmitting);
+      pttBtn.addEventListener('mouseup', stopTransmitting);
+      pttBtn.addEventListener('mouseleave', stopTransmitting);
+      pttBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startTransmitting(); });
+      pttBtn.addEventListener('touchend', (e) => { e.preventDefault(); stopTransmitting(); });
+  }
+
+  dom.volume.addEventListener('input', (e) => {
     // We could add a gain node if we wanted
     console.log("Volume set to", e.target.value);
   });
