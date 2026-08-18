@@ -120,9 +120,13 @@ class AudioBridge:
                     # From Brandmeister, forward to DMRGateway
                     if dmrgw_addr:
                         sock.sendto(data, dmrgw_addr)
+                        
+                    # Log packet signature for debugging
+                    if len(data) >= 4 and not data.startswith(b"DMRP"):
+                        logging.info(f"BM Packet: {data[:4]} len={len(data)}")
                     
                     # Intercept and decode voice frames
-                    if data.startswith(b"DMRV"):
+                    if data.startswith(b"DMRV") or data.startswith(b"DMRD"):
                         if getattr(self, "is_receiving", False) == False:
                             self.is_receiving = True
                             if self.connected_clients:
