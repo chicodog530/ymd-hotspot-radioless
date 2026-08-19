@@ -133,7 +133,7 @@ if [[ -d /opt/ywd-hotspot/app/lib/vocoder ]]; then
   python3 -m pip install bitarray dmr_utils3 --break-system-packages || true
   
   echo "Compiling software AMBE vocoder plugin (this may take a minute)..."
-  (cd /opt/ywd-hotspot/app/lib/vocoder && g++ -O3 -fPIC -shared -I. -o vocoder.so *.cpp *.cc *.c) || echo "Warning: Failed to compile vocoder plugin."
+  (cd /opt/ywd-hotspot/app/lib/vocoder && g++ -O3 -fPIC -shared -I. -o vocoder.so *.cpp *.cc *.c && chmod 0755 vocoder.so) || echo "Warning: Failed to compile vocoder plugin."
 fi
 
 # Ship only the small WebP badge to the appliance; keep the large master artwork
