@@ -29,7 +29,13 @@
       <div class="formgrid">
         <div class="field">
           <label>CURRENT TALKGROUP</label>
-          <input id="termTgInput" inputmode="numeric" placeholder="e.g. 3100" value="9990">
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <input id="termTgInput" inputmode="numeric" placeholder="e.g. 3100" value="9990" style="flex: 1;">
+            <label style="display: flex; align-items: center; gap: 4px; font-size: 0.85em; white-space: nowrap; cursor: pointer; color: var(--text-muted);">
+              <input type="checkbox" id="termPrivateCall" style="accent-color: var(--primary);">
+              Private Call
+            </label>
+          </div>
         </div>
         <div class="field">
           <label>SPEAKER OUTPUT</label>

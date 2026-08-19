@@ -211,6 +211,7 @@ class AudioBridge:
                             self.current_tg = data.get("tg")
                         elif data.get("type") == "tx_start":
                             self.tx_tg = int(data.get("tg", "9990"))
+                            call_type = data.get("call_type", "group")
                             self.tx_active = True
                             self.tx_seq = 0
                             self.pcm_buffer = []
@@ -221,9 +222,10 @@ class AudioBridge:
                                 self.vocoder = Vocoder()
                             if not self.dmr_encoder:
                                 from dmr_encoder import DMREncoder
-                                self.dmr_encoder = DMREncoder(color_code=1, src_id=int(self.callsign) if self.callsign.isdigit() else 1234567, dst_id=self.tx_tg)
+                                self.dmr_encoder = DMREncoder(color_code=1, src_id=int(self.callsign) if self.callsign.isdigit() else 1234567, dst_id=self.tx_tg, call_type=call_type)
                             else:
                                 self.dmr_encoder.dst_id = self.tx_tg
+                                self.dmr_encoder.call_type = call_type
                             
                             # Generate Voice Header and transmit
                             if self.sock and (self.dmrgw_addr or self.bm_addr):

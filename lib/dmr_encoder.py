@@ -5,10 +5,11 @@ from dmr_utils3.const import SYNC
 import struct
 
 class DMREncoder:
-    def __init__(self, color_code=1, src_id=1234567, dst_id=9990):
+    def __init__(self, color_code=1, src_id=1234567, dst_id=9990, call_type="group"):
         self.color_code = color_code
         self.src_id = src_id
         self.dst_id = dst_id
+        self.call_type = call_type
         
     def _get_slot_type_bits(self, data_type):
         val = (self.color_code << 4) | data_type
@@ -19,8 +20,8 @@ class DMREncoder:
         return bits
         
     def _create_lc(self, is_terminator=False):
-        # Create a standard 9-byte Group Voice Link Control
-        # Byte 0: 0x00 (Group Voice)
+        # Create a standard 9-byte Voice Link Control
+        # Byte 0: 0x00 (Group Voice) or 0x03 (Private Voice)
         # Byte 1: FID (0x00)
         # Byte 2-4: DST ID (24 bit)
         # Byte 5-7: SRC ID (24 bit)
@@ -34,7 +35,7 @@ class DMREncoder:
         src_bytes = self.src_id.to_bytes(3, 'big')
         
         # Byte 0: PF(1) | R(1) | FLCO(6)
-        byte0 = 0x00 # Group Voice
+        byte0 = 0x03 if self.call_type == "private" else 0x00
         byte1 = 0x00 # FID Standard
         
         lc = bytearray([byte0, byte1]) + dst_bytes + src_bytes + bytearray([0x00])

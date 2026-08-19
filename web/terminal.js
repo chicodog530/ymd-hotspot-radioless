@@ -158,7 +158,8 @@
           micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
           if (!audioCtx) return;
           
-          ws.send(JSON.stringify({ type: "tx_start", tg: dom.tgInput.value }));
+          const callType = document.getElementById('termPrivateCall').checked ? "private" : "group";
+          ws.send(JSON.stringify({ type: "tx_start", tg: dom.tgInput.value, call_type: callType }));
           
           micSource = audioCtx.createMediaStreamSource(micStream);
           scriptNode = audioCtx.createScriptProcessor(4096, 1, 1);
