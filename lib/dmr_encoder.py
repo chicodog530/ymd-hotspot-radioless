@@ -55,31 +55,37 @@ class DMREncoder:
         lc = self._create_lc()
         full_lc = bptc.encode_header_lc(lc) # 196 bit bitarray
         
-        slot_type = self._get_slot_type_bits(data_type=1) # 1 = Voice LC Header
-        sync = SYNC['BS_DATA'] # 48 bits
+        slot_type = self._get_slot_type_bits(1) # 1 = Voice LC Header
+        
+        # ETSI standard Data Frame structure (264 bits):
+        # 98 bits of data
+        # 10 bits of slot type
+        # 48 bits of sync (BS_DATA)
+        # 10 bits of slot type
+        # 98 bits of data
         
         frame = bitarray(endian='big')
         frame.extend(full_lc[:98])
         frame.extend(slot_type[:10])
-        frame.extend(sync)
-        frame.extend(slot_type[10:20])
-        frame.extend(full_lc[98:196])
+        frame.extend(SYNC['BS_DATA'])
+        frame.extend(slot_type[10:])
+        frame.extend(full_lc[98:])
+        
         return frame.tobytes()
 
     def generate_voice_terminator(self):
         """Generates the 33-byte RF Voice Terminator packet"""
         lc = self._create_lc(is_terminator=True)
-        full_lc = bptc.encode_terminator_lc(lc)
-        
-        slot_type = self._get_slot_type_bits(data_type=2) # 2 = Terminator with LC
-        sync = SYNC['BS_DATA']
+        term_lc = bptc.encode_terminator_lc(lc)
+        slot_type = self._get_slot_type_bits(2) # 2 = Terminator with LC
         
         frame = bitarray(endian='big')
-        frame.extend(full_lc[:98])
+        frame.extend(term_lc[:98])
         frame.extend(slot_type[:10])
-        frame.extend(sync)
-        frame.extend(slot_type[10:20])
-        frame.extend(full_lc[98:196])
+        frame.extend(SYNC['BS_DATA'])
+        frame.extend(slot_type[10:])
+        frame.extend(term_lc[98:])
+        
         return frame.tobytes()
 
     def generate_voice_burst(self, ambe_frames, sequence_number):
