@@ -43,13 +43,12 @@ class AudioBridge:
         self.is_receiving = False
         
         # TX State
-        self.tx_active = False
-        self.tx_tg = 9990
         self.tx_seq = 0
         self.pcm_buffer = []
         self.sock = None
         self.dmrgw_addr = None
         self.bm_addr = None
+        self.sniffed_repeater_id = None
         
         # Dynamic Modules
         self.vocoder = None
@@ -129,6 +128,9 @@ class AudioBridge:
                 if addr[0] == "127.0.0.1":
                     # From DMRGateway, forward to Brandmeister
                     self.dmrgw_addr = addr
+                    if data.startswith(b"DMRL") and len(data) >= 8:
+                        self.sniffed_repeater_id = data[4:8]
+                        logging.info(f"Sniffed Repeater ID from DMRL: {self.sniffed_repeater_id.hex()}")
                     self.sock.sendto(data, self.bm_addr)
                 else:
                     # From Brandmeister, forward to DMRGateway
@@ -231,7 +233,7 @@ class AudioBridge:
                             # Generate Voice Header and transmit
                             if self.sock:
                                 hdr = self.dmr_encoder.generate_voice_header()
-                                pkt = self.dmr_encoder.pack_mmdvm_dmrd(hdr, 1, self.tx_seq)
+                                pkt = self.dmr_encoder.pack_mmdvm_dmrd(hdr, 1, self.tx_seq, repeater_id=self.sniffed_repeater_id)
                                 if self.bm_addr:
                                     self.sock.sendto(pkt, self.bm_addr)
                                 if self.dmrgw_addr:
@@ -241,7 +243,7 @@ class AudioBridge:
                         elif data.get("type") == "tx_stop":
                             if self.tx_active and self.sock:
                                 term = self.dmr_encoder.generate_voice_terminator()
-                                pkt = self.dmr_encoder.pack_mmdvm_dmrd(term, 2, self.tx_seq)
+                                pkt = self.dmr_encoder.pack_mmdvm_dmrd(term, 2, self.tx_seq, repeater_id=self.sniffed_repeater_id)
                                 if self.bm_addr:
                                     self.sock.sendto(pkt, self.bm_addr)
                                 if self.dmrgw_addr:
@@ -274,7 +276,7 @@ class AudioBridge:
                         # Generate Burst and Send
                         if self.sock:
                             burst = self.dmr_encoder.generate_voice_burst(ambe_frames, self.tx_seq)
-                            pkt = self.dmr_encoder.pack_mmdvm_dmrd(burst, 0, self.tx_seq)
+                            pkt = self.dmr_encoder.pack_mmdvm_dmrd(burst, 0, self.tx_seq, repeater_id=self.sniffed_repeater_id)
                             if self.bm_addr:
                                 self.sock.sendto(pkt, self.bm_addr)
                             if self.dmrgw_addr:
