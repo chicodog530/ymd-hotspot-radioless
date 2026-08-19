@@ -998,7 +998,7 @@ public:
 		memset(ambe_d, 0, 49);
 		
 		// Initialize the encoder parameters as well
-		mbelib_param dummy;
+		mbe_parms dummy;
 		mbe_initMbeParms(&cur_mp, &prev_mp, &dummy);
 	}
 	
