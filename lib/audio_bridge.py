@@ -64,7 +64,8 @@ class AudioBridge:
             self.bm_master = c.get("brandmeister", {}).get("master", "3102.master.brandmeister.network")
             self.bm_port = int(c.get("brandmeister", {}).get("port", 62031))
             self.callsign = c.get("station", {}).get("callsign", "NOCALL")
-            logging.info(f"Loaded config: Callsign={self.callsign}, Master={self.bm_master}:{self.bm_port}")
+            self.dmr_id = int(c.get("dmr", {}).get("id", 1234567))
+            logging.info(f"Loaded config: Callsign={self.callsign}, DMR ID={self.dmr_id}, Master={self.bm_master}:{self.bm_port}")
         except Exception as e:
             logging.error(f"Could not load config.json: {e}")
             self.bm_master = "3102.master.brandmeister.network"
@@ -222,7 +223,7 @@ class AudioBridge:
                                 self.vocoder = Vocoder()
                             if not self.dmr_encoder:
                                 from dmr_encoder import DMREncoder
-                                self.dmr_encoder = DMREncoder(color_code=1, src_id=int(self.callsign) if self.callsign.isdigit() else 1234567, dst_id=self.tx_tg, call_type=call_type)
+                                self.dmr_encoder = DMREncoder(color_code=1, src_id=self.dmr_id, dst_id=self.tx_tg, call_type=call_type)
                             else:
                                 self.dmr_encoder.dst_id = self.tx_tg
                                 self.dmr_encoder.call_type = call_type
