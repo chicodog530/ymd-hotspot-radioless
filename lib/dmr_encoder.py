@@ -5,11 +5,14 @@ from dmr_utils3.const import SYNC
 import struct
 
 class DMREncoder:
-    def __init__(self, color_code=1, src_id=1234567, dst_id=9990, call_type="group"):
+    def __init__(self, color_code=1, src_id=1234567, dst_id=9990, call_type="private"):
         self.color_code = color_code
         self.src_id = src_id
         self.dst_id = dst_id
         self.call_type = call_type
+        self.stream_id = 0
+        import random
+        self.random = random
         
     def _get_slot_type_bits(self, data_type):
         val = (self.color_code << 4) | data_type
@@ -113,38 +116,39 @@ class DMREncoder:
         header = b"DMRD"
         header += bytes([sequence])
         
-        src_bytes = self.src_id.to_bytes(4, 'little')
-        dst_bytes = self.dst_id.to_bytes(4, 'little')
-        
-        # Homebrew 20-byte header
-        # 0-3: DMRD
-        # 4: Seq
-        # 5-7: Src
-        # 8-10: Dst
-        # 11-14: Repeater (BrandMeister extension)
-        # 15: Slot / Type
-        # 16-19: Stream ID
-        
-        # Let's craft the 20 byte header
         # Dst ID (3 bytes)
         dst_3 = self.dst_id.to_bytes(3, 'big')
         src_3 = self.src_id.to_bytes(3, 'big')
         if repeater_id is None:
             repeater_id = self.src_id.to_bytes(4, 'big')
+            
+        # Byte 15 Calculation (Slot 2 = 0x80)
+        byte_15 = 0x80
         
-        # frame_type indicates Header, Terminator, or Voice
-        # dtype_vseq for voice: 0=A ... 5=F
-        # 1 = Voice Header, 2 = Terminator
+        # Private vs Group Call flag
+        if self.call_type == "private":
+            byte_15 |= 0x40
+            
+        # Data Type flags and Stream ID generation
+        if frame_type == 1: # Voice Header
+            self.stream_id = self.random.randint(1, 0xfffffffe)
+            byte_15 |= (0x20 | 1) # DT_VOICE_LC_HEADER
+        elif frame_type == 2: # Terminator
+            byte_15 |= (0x20 | 2) # DT_TERMINATOR_WITH_LC
+        else: # Voice Bursts
+            if sequence == 0 or sequence == 5: # Burst A or F (Voice Sync)
+                byte_15 |= 0x10 # DT_VOICE_SYNC
+            else: # Burst B, C, D, E
+                byte_15 |= sequence # DT_VOICE
+                
+        stream_bytes = self.stream_id.to_bytes(4, 'big')
         
-        # We will hardcode Slot 2 (0x80) and Voice flag (0x00) -> so byte 15 is 0x80 | frame_type
-        byte_15 = 0x80 | frame_type
+        header += src_3
+        header += dst_3
+        header += repeater_id
+        header += bytes([byte_15])
+        header += stream_bytes
         
-        stream_id = b'\x00\x00\x00\x01'
-        
-        packet = b"DMRD" + bytes([sequence]) + src_3 + dst_3 + repeater_id + bytes([byte_15]) + stream_id
-        
-        packet += rf_frame
-        
-        # add 2 byte checksum
-        packet += b'\x00\x00'
-        return packet
+        # MMDVM expects 55 bytes total. 20 byte header + 33 byte RF Frame + 2 bytes (BER, RSSI)
+        ber_rssi = bytes([0x00, 0x00])
+        return header + rf_frame + ber_rssi
