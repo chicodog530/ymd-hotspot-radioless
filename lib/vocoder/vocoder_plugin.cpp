@@ -1186,11 +1186,12 @@ public:
 		ambe_frame[47] = (b[8] >> 1) & 1;
 		ambe_frame[48] = b[8] & 1;
 		
-		for(int i = 0; i < 7; ++i){
+		for(int i = 0; i < 6; ++i){
 			for(int j = 0; j < 8; ++j){
 				ambe[i] |= (ambe_frame[(i*8)+j] << (7-j));
 			}
 		}
+		ambe[6] |= (ambe_frame[48] << 7);
 	}
 private:
 	imbe_vocoder vocoder;
