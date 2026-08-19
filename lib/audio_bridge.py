@@ -229,19 +229,23 @@ class AudioBridge:
                                 self.dmr_encoder.call_type = call_type
                             
                             # Generate Voice Header and transmit
-                            if self.sock and (self.dmrgw_addr or self.bm_addr):
-                                target = self.dmrgw_addr if self.dmrgw_addr else self.bm_addr
+                            if self.sock:
                                 hdr = self.dmr_encoder.generate_voice_header()
                                 pkt = self.dmr_encoder.pack_mmdvm_dmrd(hdr, 1, self.tx_seq)
-                                self.sock.sendto(pkt, target)
+                                if self.bm_addr:
+                                    self.sock.sendto(pkt, self.bm_addr)
+                                if self.dmrgw_addr:
+                                    self.sock.sendto(pkt, self.dmrgw_addr)
                                 self.tx_seq = (self.tx_seq + 1) % 6
                                 
                         elif data.get("type") == "tx_stop":
-                            if self.tx_active and self.sock and (self.dmrgw_addr or self.bm_addr):
-                                target = self.dmrgw_addr if self.dmrgw_addr else self.bm_addr
+                            if self.tx_active and self.sock:
                                 term = self.dmr_encoder.generate_voice_terminator()
                                 pkt = self.dmr_encoder.pack_mmdvm_dmrd(term, 2, self.tx_seq)
-                                self.sock.sendto(pkt, target)
+                                if self.bm_addr:
+                                    self.sock.sendto(pkt, self.bm_addr)
+                                if self.dmrgw_addr:
+                                    self.sock.sendto(pkt, self.dmrgw_addr)
                             self.tx_active = False
                             
                     elif isinstance(message, bytes) and self.tx_active:
@@ -268,11 +272,13 @@ class AudioBridge:
                             ambe_frames.append(ambe)
                             
                         # Generate Burst and Send
-                        if self.sock and (self.dmrgw_addr or self.bm_addr):
-                            target = self.dmrgw_addr if self.dmrgw_addr else self.bm_addr
+                        if self.sock:
                             burst = self.dmr_encoder.generate_voice_burst(ambe_frames, self.tx_seq)
                             pkt = self.dmr_encoder.pack_mmdvm_dmrd(burst, 0, self.tx_seq)
-                            self.sock.sendto(pkt, target)
+                            if self.bm_addr:
+                                self.sock.sendto(pkt, self.bm_addr)
+                            if self.dmrgw_addr:
+                                self.sock.sendto(pkt, self.dmrgw_addr)
                             self.tx_seq = (self.tx_seq + 1) % 6
         except websockets.exceptions.ConnectionClosed:
             logging.info("Web Terminal disconnected.")
