@@ -996,6 +996,10 @@ public:
 
 		initMbeParms();
 		memset(ambe_d, 0, 49);
+		
+		// Initialize the encoder parameters as well
+		mbelib_param dummy;
+		mbe_initMbeParms(&cur_mp, &prev_mp, &dummy);
 	}
 	
 	virtual void decode_2400x1200(int16_t *pcm, uint8_t *ambe)

@@ -203,53 +203,57 @@ class AudioBridge:
         self.connected_clients.add(websocket)
         try:
             async for message in websocket:
-                if isinstance(message, str):
-                    data = json.loads(message)
-                    logging.info(f"Control message: {data}")
-                    if data.get("type") == "control":
-                        self.current_tg = data.get("tg")
-                    elif data.get("type") == "tx_start":
-                        self.tx_tg = int(data.get("tg", "9990"))
-                        self.tx_active = True
-                        self.tx_seq = 0
-                        self.pcm_buffer = []
-                        
-                        # Initialize vocoder and encoder on demand
-                        if not self.vocoder:
-                            from vocoder import Vocoder
-                            self.vocoder = Vocoder()
-                        if not self.dmr_encoder:
-                            from dmr_encoder import DMREncoder
-                            self.dmr_encoder = DMREncoder(color_code=1, src_id=int(self.callsign) if self.callsign.isdigit() else 1234567, dst_id=self.tx_tg)
-                        else:
-                            self.dmr_encoder.dst_id = self.tx_tg
-                        
-                        # Generate Voice Header and transmit
-                        if self.sock and (self.dmrgw_addr or self.bm_addr):
-                            target = self.dmrgw_addr if self.dmrgw_addr else self.bm_addr
-                            hdr = self.dmr_encoder.generate_voice_header()
-                            pkt = self.dmr_encoder.pack_mmdvm_dmrd(hdr, 1, self.tx_seq)
-                            self.sock.sendto(pkt, target)
-                            self.tx_seq = (self.tx_seq + 1) % 6
+                try:
+                    if isinstance(message, str):
+                        data = json.loads(message)
+                        logging.info(f"Control message: {data}")
+                        if data.get("type") == "control":
+                            self.current_tg = data.get("tg")
+                        elif data.get("type") == "tx_start":
+                            self.tx_tg = int(data.get("tg", "9990"))
+                            self.tx_active = True
+                            self.tx_seq = 0
+                            self.pcm_buffer = []
                             
-                    elif data.get("type") == "tx_stop":
-                        if self.tx_active and self.sock and (self.dmrgw_addr or self.bm_addr):
-                            target = self.dmrgw_addr if self.dmrgw_addr else self.bm_addr
-                            term = self.dmr_encoder.generate_voice_terminator()
-                            pkt = self.dmr_encoder.pack_mmdvm_dmrd(term, 2, self.tx_seq)
-                            self.sock.sendto(pkt, target)
-                        self.tx_active = False
+                            # Initialize vocoder and encoder on demand
+                            if not self.vocoder:
+                                from vocoder import Vocoder
+                                self.vocoder = Vocoder()
+                            if not self.dmr_encoder:
+                                from dmr_encoder import DMREncoder
+                                self.dmr_encoder = DMREncoder(color_code=1, src_id=int(self.callsign) if self.callsign.isdigit() else 1234567, dst_id=self.tx_tg)
+                            else:
+                                self.dmr_encoder.dst_id = self.tx_tg
+                            
+                            # Generate Voice Header and transmit
+                            if self.sock and (self.dmrgw_addr or self.bm_addr):
+                                target = self.dmrgw_addr if self.dmrgw_addr else self.bm_addr
+                                hdr = self.dmr_encoder.generate_voice_header()
+                                pkt = self.dmr_encoder.pack_mmdvm_dmrd(hdr, 1, self.tx_seq)
+                                self.sock.sendto(pkt, target)
+                                self.tx_seq = (self.tx_seq + 1) % 6
+                                
+                        elif data.get("type") == "tx_stop":
+                            if self.tx_active and self.sock and (self.dmrgw_addr or self.bm_addr):
+                                target = self.dmrgw_addr if self.dmrgw_addr else self.bm_addr
+                                term = self.dmr_encoder.generate_voice_terminator()
+                                pkt = self.dmr_encoder.pack_mmdvm_dmrd(term, 2, self.tx_seq)
+                                self.sock.sendto(pkt, target)
+                            self.tx_active = False
+                            
+                    elif isinstance(message, bytes) and self.tx_active:
+                        # Received Float32 PCM from Browser (8000 Hz)
+                        floats = struct.unpack(f"<{len(message)//4}f", message)
                         
-                elif isinstance(message, bytes) and self.tx_active:
-                    # Received Float32 PCM from Browser (8000 Hz)
-                    floats = struct.unpack(f"<{len(message)//4}f", message)
-                    
-                    # Convert to int16
-                    for f in floats:
-                        s = int(f * 32767.0)
-                        if s > 32767: s = 32767
-                        if s < -32768: s = -32768
-                        self.pcm_buffer.append(s)
+                        # Convert to int16
+                        for f in floats:
+                            s = int(f * 32767.0)
+                            if s > 32767: s = 32767
+                            if s < -32768: s = -32768
+                            self.pcm_buffer.append(s)
+                except Exception as e:
+                    logging.error(f"Error inside handle_client message processing: {e}", exc_info=True)
+                    self.tx_active = False
                         
                     # We need exactly 3 AMBE frames (3 * 160 = 480 samples) for one burst
                     while len(self.pcm_buffer) >= 480:
