@@ -128,6 +128,14 @@ for item in \
   [[ -e "$SELF/$item" ]] && cp -a "$SELF/$item" /opt/ywd-hotspot/app/
 done
 
+if [[ -d /opt/ywd-hotspot/app/lib/vocoder ]]; then
+  echo "Installing Python DMR dependencies..."
+  python3 -m pip install bitarray dmr_utils3 || true
+  
+  echo "Compiling software AMBE vocoder plugin (this may take a minute)..."
+  (cd /opt/ywd-hotspot/app/lib/vocoder && g++ -O3 -fPIC -shared -o vocoder.so *.cpp *.cc *.c) || echo "Warning: Failed to compile vocoder plugin."
+fi
+
 # Ship only the small WebP badge to the appliance; keep the large master artwork
 # in the repository rather than wasting Pi storage/runtime backups.
 install -d -m 0755 /opt/ywd-hotspot/app/assets/branding

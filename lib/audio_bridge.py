@@ -41,6 +41,20 @@ class AudioBridge:
         self.callsign = "NOCALL"
         self.connected_clients = set()
         self.is_receiving = False
+        
+        # TX State
+        self.tx_active = False
+        self.tx_tg = 9990
+        self.tx_seq = 0
+        self.pcm_buffer = []
+        self.sock = None
+        self.dmrgw_addr = None
+        self.bm_addr = None
+        
+        # Dynamic Modules
+        self.vocoder = None
+        self.dmr_encoder = None
+        
         self.load_config()
         
     def load_config(self):
@@ -94,32 +108,31 @@ class AudioBridge:
 
     async def brandmeister_proxy(self):
         import socket
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind(("0.0.0.0", 62035))
-        sock.setblocking(False)
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.sock.bind(("0.0.0.0", 62035))
+        self.sock.setblocking(False)
         
         try:
             bm_ip = socket.gethostbyname(self.bm_master)
         except Exception:
             bm_ip = self.bm_master
-        bm_addr = (bm_ip, self.bm_port)
+        self.bm_addr = (bm_ip, self.bm_port)
         
-        dmrgw_addr = None
-        logging.info(f"Audio Bridge Proxy listening on 62035, forwarding to {bm_addr}")
+        logging.info(f"Audio Bridge Proxy listening on 62035, forwarding to {self.bm_addr}")
         
         while True:
             now = asyncio.get_event_loop().time()
             try:
-                data, addr = sock.recvfrom(2048)
+                data, addr = self.sock.recvfrom(2048)
                 if addr[0] == "127.0.0.1":
                     # From DMRGateway, forward to Brandmeister
-                    dmrgw_addr = addr
-                    sock.sendto(data, bm_addr)
+                    self.dmrgw_addr = addr
+                    self.sock.sendto(data, self.bm_addr)
                 else:
                     # From Brandmeister, forward to DMRGateway
-                    if dmrgw_addr:
-                        sock.sendto(data, dmrgw_addr)
+                    if self.dmrgw_addr:
+                        self.sock.sendto(data, self.dmrgw_addr)
                         
                     # Log packet signature for debugging
                     if len(data) >= 4 and not data.startswith(b"DMRP"):
@@ -195,6 +208,65 @@ class AudioBridge:
                     logging.info(f"Control message: {data}")
                     if data.get("type") == "control":
                         self.current_tg = data.get("tg")
+                    elif data.get("type") == "tx_start":
+                        self.tx_tg = int(data.get("tg", "9990"))
+                        self.tx_active = True
+                        self.tx_seq = 0
+                        self.pcm_buffer = []
+                        
+                        # Initialize vocoder and encoder on demand
+                        if not self.vocoder:
+                            from vocoder import Vocoder
+                            self.vocoder = Vocoder()
+                        if not self.dmr_encoder:
+                            from dmr_encoder import DMREncoder
+                            self.dmr_encoder = DMREncoder(color_code=1, src_id=int(self.callsign) if self.callsign.isdigit() else 1234567, dst_id=self.tx_tg)
+                        else:
+                            self.dmr_encoder.dst_id = self.tx_tg
+                        
+                        # Generate Voice Header and transmit
+                        if self.sock and (self.dmrgw_addr or self.bm_addr):
+                            target = self.dmrgw_addr if self.dmrgw_addr else self.bm_addr
+                            hdr = self.dmr_encoder.generate_voice_header()
+                            pkt = self.dmr_encoder.pack_mmdvm_dmrd(hdr, 1, self.tx_seq)
+                            self.sock.sendto(pkt, target)
+                            self.tx_seq = (self.tx_seq + 1) % 6
+                            
+                    elif data.get("type") == "tx_stop":
+                        if self.tx_active and self.sock and (self.dmrgw_addr or self.bm_addr):
+                            target = self.dmrgw_addr if self.dmrgw_addr else self.bm_addr
+                            term = self.dmr_encoder.generate_voice_terminator()
+                            pkt = self.dmr_encoder.pack_mmdvm_dmrd(term, 2, self.tx_seq)
+                            self.sock.sendto(pkt, target)
+                        self.tx_active = False
+                        
+                elif isinstance(message, bytes) and self.tx_active:
+                    # Received Float32 PCM from Browser (8000 Hz)
+                    floats = struct.unpack(f"<{len(message)//4}f", message)
+                    
+                    # Convert to int16
+                    for f in floats:
+                        s = int(f * 32767.0)
+                        if s > 32767: s = 32767
+                        if s < -32768: s = -32768
+                        self.pcm_buffer.append(s)
+                        
+                    # We need exactly 3 AMBE frames (3 * 160 = 480 samples) for one burst
+                    while len(self.pcm_buffer) >= 480:
+                        ambe_frames = []
+                        for i in range(3):
+                            chunk = self.pcm_buffer[:160]
+                            self.pcm_buffer = self.pcm_buffer[160:]
+                            ambe = self.vocoder.encode_frame(chunk)
+                            ambe_frames.append(ambe)
+                            
+                        # Generate Burst and Send
+                        if self.sock and (self.dmrgw_addr or self.bm_addr):
+                            target = self.dmrgw_addr if self.dmrgw_addr else self.bm_addr
+                            burst = self.dmr_encoder.generate_voice_burst(ambe_frames, self.tx_seq)
+                            pkt = self.dmr_encoder.pack_mmdvm_dmrd(burst, 0, self.tx_seq)
+                            self.sock.sendto(pkt, target)
+                            self.tx_seq = (self.tx_seq + 1) % 6
         except websockets.exceptions.ConnectionClosed:
             logging.info("Web Terminal disconnected.")
         finally:

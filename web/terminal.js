@@ -61,6 +61,7 @@
         dom.connStatus.textContent = "CONNECTED";
         dom.connectBtn.hidden = true;
         dom.disconnectBtn.hidden = false;
+        document.getElementById('termPttBtn').hidden = false;
         sendControlState();
       };
 
