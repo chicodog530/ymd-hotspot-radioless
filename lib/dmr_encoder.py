@@ -40,8 +40,14 @@ class DMREncoder:
         # Byte 0: PF(1) | R(1) | FLCO(6)
         byte0 = 0x03 if self.call_type == "private" else 0x00
         byte1 = 0x00 # FID Standard
+        # Link Control is 72 bits (9 bytes)
+        # 0: FLCO
+        # 1: FID
+        # 2: Options (usually 0x00)
+        # 3-5: Dst
+        # 6-8: Src
         
-        lc = bytearray([byte0, byte1]) + dst_bytes + src_bytes + bytearray([0x00])
+        lc = bytearray([byte0, byte1, 0x00]) + dst_bytes + src_bytes
         return bytes(lc)
 
     def generate_voice_header(self):
