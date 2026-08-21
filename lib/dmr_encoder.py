@@ -163,11 +163,9 @@ class DMREncoder:
             byte_15 |= (0x20 | 1) # DT_VOICE_LC_HEADER
         elif frame_type == 2: # Terminator
             byte_15 |= (0x20 | 2) # DT_TERMINATOR_WITH_LC
-        else: # Voice Bursts
-            if burst_idx == 0 or burst_idx == 5: # Burst A or F (Voice Sync)
-                byte_15 |= 0x10 # DT_VOICE_SYNC
-            else: # Burst B, C, D, E
-                byte_15 |= burst_idx # DT_VOICE
+        else: # Voice Bursts (A-F)
+            byte_15 |= 0x10 # DT_VOICE (0x10 is set for ALL voice bursts)
+            byte_15 |= burst_idx # Lower 4 bits are the sequence number (0-5)
                 
         stream_bytes = self.stream_id.to_bytes(4, 'big')
         
