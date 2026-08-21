@@ -63,7 +63,7 @@ class AudioBridge:
             self.bm_master = c.get("brandmeister", {}).get("master", "3102.master.brandmeister.network")
             self.bm_port = int(c.get("brandmeister", {}).get("port", 62031))
             self.callsign = c.get("station", {}).get("callsign", "NOCALL")
-            self.dmr_id = int(c.get("dmr", {}).get("id", 1234567))
+            self.dmr_id = int(c.get("station", {}).get("base_dmr_id", 1234567))
             logging.info(f"Loaded config: Callsign={self.callsign}, DMR ID={self.dmr_id}, Master={self.bm_master}:{self.bm_port}")
         except Exception as e:
             logging.error(f"Could not load config.json: {e}")
@@ -299,6 +299,9 @@ class AudioBridge:
                                     
                                 self.tx_seq = (self.tx_seq + 1) % 256
                                 self.burst_idx = (self.burst_idx + 1) % 6
+                                
+                                # Pace transmission to match the DMR 60ms voice frame timing
+                                await asyncio.sleep(0.058)
                 except Exception as e:
                     logging.error(f"Error inside handle_client message processing: {e}", exc_info=True)
                     self.tx_active = False
