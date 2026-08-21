@@ -265,28 +265,28 @@ class AudioBridge:
                             if s > 32767: s = 32767
                             if s < -32768: s = -32768
                             self.pcm_buffer.append(s)
+
+                        # We need exactly 3 AMBE frames (3 * 160 = 480 samples) for one burst
+                        while len(self.pcm_buffer) >= 480:
+                            ambe_frames = []
+                            for i in range(3):
+                                chunk = self.pcm_buffer[:160]
+                                self.pcm_buffer = self.pcm_buffer[160:]
+                                ambe = self.vocoder.encode_frame(chunk)
+                                ambe_frames.append(ambe)
+
+                            # Generate Burst and Send
+                            if self.sock:
+                                burst = self.dmr_encoder.generate_voice_burst(ambe_frames, self.tx_seq)
+                                pkt = self.dmr_encoder.pack_mmdvm_dmrd(burst, 0, self.tx_seq, repeater_id=self.sniffed_repeater_id)
+                                if self.bm_addr:
+                                    self.sock.sendto(pkt, self.bm_addr)
+                                if self.dmrgw_addr:
+                                    self.sock.sendto(pkt, self.dmrgw_addr)
+                                self.tx_seq = (self.tx_seq + 1) % 6
                 except Exception as e:
                     logging.error(f"Error inside handle_client message processing: {e}", exc_info=True)
                     self.tx_active = False
-                        
-                    # We need exactly 3 AMBE frames (3 * 160 = 480 samples) for one burst
-                    while len(self.pcm_buffer) >= 480:
-                        ambe_frames = []
-                        for i in range(3):
-                            chunk = self.pcm_buffer[:160]
-                            self.pcm_buffer = self.pcm_buffer[160:]
-                            ambe = self.vocoder.encode_frame(chunk)
-                            ambe_frames.append(ambe)
-                            
-                        # Generate Burst and Send
-                        if self.sock:
-                            burst = self.dmr_encoder.generate_voice_burst(ambe_frames, self.tx_seq)
-                            pkt = self.dmr_encoder.pack_mmdvm_dmrd(burst, 0, self.tx_seq, repeater_id=self.sniffed_repeater_id)
-                            if self.bm_addr:
-                                self.sock.sendto(pkt, self.bm_addr)
-                            if self.dmrgw_addr:
-                                self.sock.sendto(pkt, self.dmrgw_addr)
-                            self.tx_seq = (self.tx_seq + 1) % 6
         except websockets.exceptions.ConnectionClosed:
             logging.info("Web Terminal disconnected.")
         finally:
