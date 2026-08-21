@@ -145,7 +145,10 @@ class DMREncoder:
         dst_3 = self.dst_id.to_bytes(3, 'big')
         src_3 = self.src_id.to_bytes(3, 'big')
         if repeater_id is None:
-            repeater_id = self.src_id.to_bytes(4, 'big')
+            if self.src_id < 100000000:
+                repeater_id = (self.src_id * 100 + 1).to_bytes(4, 'big')
+            else:
+                repeater_id = self.src_id.to_bytes(4, 'big')
             
         # Byte 15 Calculation (Slot 2 = 0x80)
         byte_15 = 0x80
