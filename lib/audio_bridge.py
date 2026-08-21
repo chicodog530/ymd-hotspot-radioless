@@ -244,6 +244,12 @@ class AudioBridge:
                                     self.sock.sendto(pkt, self.bm_addr)
                                 if self.dmrgw_addr:
                                     self.sock.sendto(pkt, self.dmrgw_addr)
+                                
+                                if not hasattr(self, 'tx_log_count'): self.tx_log_count = 0
+                                if self.tx_log_count < 10:
+                                    logging.info(f"TX DMRD HEX DUMP [{self.tx_log_count}]: {pkt.hex()}")
+                                    self.tx_log_count += 1
+                                    
                                 self.tx_seq = (self.tx_seq + 1) % 256
                                 
                         elif data.get("type") == "tx_stop":
@@ -285,6 +291,12 @@ class AudioBridge:
                                     self.sock.sendto(pkt, self.bm_addr)
                                 if self.dmrgw_addr:
                                     self.sock.sendto(pkt, self.dmrgw_addr)
+                                
+                                if not hasattr(self, 'tx_log_count'): self.tx_log_count = 0
+                                if self.tx_log_count < 10:
+                                    logging.info(f"TX DMRD HEX DUMP [{self.tx_log_count}]: {pkt.hex()}")
+                                    self.tx_log_count += 1
+                                    
                                 self.tx_seq = (self.tx_seq + 1) % 256
                                 self.burst_idx = (self.burst_idx + 1) % 6
                 except Exception as e:
