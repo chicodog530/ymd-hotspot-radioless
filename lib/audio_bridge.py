@@ -222,6 +222,7 @@ class AudioBridge:
                             call_type = data.get("call_type", "group")
                             self.tx_active = True
                             self.tx_seq = 0
+                            self.burst_idx = 0
                             self.pcm_buffer = []
                             
                             # Initialize vocoder and encoder on demand
@@ -243,7 +244,7 @@ class AudioBridge:
                                     self.sock.sendto(pkt, self.bm_addr)
                                 if self.dmrgw_addr:
                                     self.sock.sendto(pkt, self.dmrgw_addr)
-                                self.tx_seq = (self.tx_seq + 1) % 6
+                                self.tx_seq = (self.tx_seq + 1) % 256
                                 
                         elif data.get("type") == "tx_stop":
                             if self.tx_active and self.sock:
@@ -253,6 +254,7 @@ class AudioBridge:
                                     self.sock.sendto(pkt, self.bm_addr)
                                 if self.dmrgw_addr:
                                     self.sock.sendto(pkt, self.dmrgw_addr)
+                                self.tx_seq = (self.tx_seq + 1) % 256
                             self.tx_active = False
                             
                     elif isinstance(message, bytes) and self.tx_active:
@@ -277,13 +279,14 @@ class AudioBridge:
 
                             # Generate Burst and Send
                             if self.sock:
-                                burst = self.dmr_encoder.generate_voice_burst(ambe_frames, self.tx_seq)
-                                pkt = self.dmr_encoder.pack_mmdvm_dmrd(burst, 0, self.tx_seq, repeater_id=self.sniffed_repeater_id)
+                                burst = self.dmr_encoder.generate_voice_burst(ambe_frames, self.burst_idx)
+                                pkt = self.dmr_encoder.pack_mmdvm_dmrd(burst, 0, self.tx_seq, self.burst_idx, repeater_id=self.sniffed_repeater_id)
                                 if self.bm_addr:
                                     self.sock.sendto(pkt, self.bm_addr)
                                 if self.dmrgw_addr:
                                     self.sock.sendto(pkt, self.dmrgw_addr)
-                                self.tx_seq = (self.tx_seq + 1) % 6
+                                self.tx_seq = (self.tx_seq + 1) % 256
+                                self.burst_idx = (self.burst_idx + 1) % 6
                 except Exception as e:
                     logging.error(f"Error inside handle_client message processing: {e}", exc_info=True)
                     self.tx_active = False

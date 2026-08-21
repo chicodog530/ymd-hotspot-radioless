@@ -123,7 +123,7 @@ class DMREncoder:
         frame.extend(a2) # 72 bits
         return frame.tobytes()
 
-    def pack_mmdvm_dmrd(self, rf_frame, frame_type, sequence, repeater_id=None):
+    def pack_mmdvm_dmrd(self, rf_frame, frame_type, sequence, burst_idx=0, repeater_id=None):
         """Wraps a 33-byte RF frame in a 55-byte MMDVM DMRD packet"""
         header = b"DMRD"
         header += bytes([sequence])
@@ -148,10 +148,10 @@ class DMREncoder:
         elif frame_type == 2: # Terminator
             byte_15 |= (0x20 | 2) # DT_TERMINATOR_WITH_LC
         else: # Voice Bursts
-            if sequence == 0 or sequence == 5: # Burst A or F (Voice Sync)
+            if burst_idx == 0 or burst_idx == 5: # Burst A or F (Voice Sync)
                 byte_15 |= 0x10 # DT_VOICE_SYNC
             else: # Burst B, C, D, E
-                byte_15 |= sequence # DT_VOICE
+                byte_15 |= burst_idx # DT_VOICE
                 
         stream_bytes = self.stream_id.to_bytes(4, 'big')
         
