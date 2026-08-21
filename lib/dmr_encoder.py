@@ -3,6 +3,7 @@ import dmr_utils3.bptc as bptc
 import dmr_utils3.golay as golay
 from dmr_utils3.const import SYNC
 import struct
+import dmr_utils3.qr as qr
 
 class DMREncoder:
     def __init__(self, color_code=1, src_id=1234567, dst_id=9990, call_type="private"):
@@ -113,11 +114,25 @@ class DMREncoder:
             lc = self._create_lc()
             emb_lc_ints = bptc.encode_emblc(lc)
             emb_int = emb_lc_ints[sequence_number] # Keys are 1, 2, 3, 4
-            # But wait! emb_lc_ints are 32 bits! The center block is 48 bits!
-            # The other 16 bits are LCO and Parity.
-            # I will just fill it with dummy bits for now to pass the encoder test.
-            dummy_sync = bitarray('0'*48)
-            frame.extend(dummy_sync)
+            
+            lcss_map = {1: 1, 2: 3, 3: 3, 4: 2} # B=1, C=3, D=3, E=2
+            lcss = lcss_map[sequence_number]
+            pi = 0
+            b0 = (self.color_code << 4) | (pi << 3) | (lcss << 1)
+            emb = qr.encode(bytearray([b0, 0]))
+            
+            center_bits = bitarray(endian='big')
+            center_bits.frombytes(bytes([emb[0]]))
+            
+            lc_bits = bitarray(endian='big')
+            lc_bits.frombytes(emb_int.to_bytes(4, 'big'))
+            center_bits.extend(lc_bits)
+            
+            end_bits = bitarray(endian='big')
+            end_bits.frombytes(bytes([emb[1]]))
+            center_bits.extend(end_bits)
+            
+            frame.extend(center_bits)
             
         frame.extend(a1[36:]) # 36 bits
         frame.extend(a2) # 72 bits
