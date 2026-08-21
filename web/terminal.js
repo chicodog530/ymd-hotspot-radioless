@@ -114,7 +114,12 @@
       const source = audioCtx.createBufferSource();
       source.buffer = buffer;
       
-      source.connect(audioCtx.destination); 
+      // Safe volume boost (1.5x) to ensure audibility without severe clipping
+      const gainNode = audioCtx.createGain();
+      gainNode.gain.value = 1.5;
+      
+      source.connect(gainNode);
+      gainNode.connect(audioCtx.destination); 
       
       // Gapless playback scheduling with minimal 30ms jitter buffer
       if (nextAudioTime < audioCtx.currentTime) {
