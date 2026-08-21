@@ -124,9 +124,7 @@ class DMREncoder:
             center_bits = bitarray(endian='big')
             center_bits.frombytes(bytes([emb[0]]))
             
-            lc_bits = bitarray(endian='big')
-            lc_bits.frombytes(emb_int.to_bytes(4, 'big'))
-            center_bits.extend(lc_bits)
+            center_bits.extend(emb_int)
             
             end_bits = bitarray(endian='big')
             end_bits.frombytes(bytes([emb[1]]))
