@@ -18,6 +18,12 @@
 #ifndef _MBELIB_H
 #define _MBELIB_H
 
+#include <math.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define MBELIB_VERSION "1.3.0"
 
 struct mbe_parameters
