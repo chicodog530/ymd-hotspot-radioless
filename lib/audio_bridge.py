@@ -149,6 +149,8 @@ class AudioBridge:
                         if getattr(self, "is_receiving", False) == False:
                             self.is_receiving = True
                             self.last_rx_seq = -1
+                            if hasattr(self, 'vocoder') and self.vocoder:
+                                self.vocoder.reset()
                             if self.connected_clients:
                                 websockets.broadcast(self.connected_clients, json.dumps({
                                     "type": "rx_start",

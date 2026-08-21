@@ -114,16 +114,11 @@
       const source = audioCtx.createBufferSource();
       source.buffer = buffer;
       
-      // Boost volume by 2.5x
-      const gainNode = audioCtx.createGain();
-      gainNode.gain.value = 2.5;
+      source.connect(audioCtx.destination); 
       
-      source.connect(gainNode);
-      gainNode.connect(audioCtx.destination); 
-      
-      // Gapless playback scheduling with 150ms jitter buffer for network stability
+      // Gapless playback scheduling with minimal 30ms jitter buffer
       if (nextAudioTime < audioCtx.currentTime) {
-          nextAudioTime = audioCtx.currentTime + 0.15; // 150ms buffer if underrun
+          nextAudioTime = audioCtx.currentTime + 0.03; // 30ms buffer if underrun
       }
       
       source.start(nextAudioTime);

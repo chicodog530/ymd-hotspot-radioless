@@ -27,9 +27,17 @@ class Vocoder:
             raise RuntimeError("Failed to create Vocoder object.")
             
     def __del__(self):
-        if hasattr(self, 'obj') and self.obj:
-            self.lib.destroy(self.obj)
-            self.obj = None
+        if hasattr(self, 'lib') and self.lib:
+            try:
+                self.lib.destroy_vocoder_c(self.obj)
+            except:
+                pass
+                
+    def reset(self):
+        """Reset the vocoder state to prevent cross-transmission garbling"""
+        if hasattr(self, 'lib') and self.lib:
+            self.lib.destroy_vocoder_c(self.obj)
+            self.obj = self.lib.create_vocoder_c()
 
     def encode_frame(self, pcm_samples: List[int]) -> bytes:
         """
