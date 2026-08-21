@@ -112,7 +112,7 @@ class DMREncoder:
             # encode_emblc returns a list of 4 integers representing the 4 bursts
             lc = self._create_lc()
             emb_lc_ints = bptc.encode_emblc(lc)
-            emb_int = emb_lc_ints[sequence_number - 1] # 1->0, 2->1, 3->2, 4->3
+            emb_int = emb_lc_ints[sequence_number] # Keys are 1, 2, 3, 4
             # But wait! emb_lc_ints are 32 bits! The center block is 48 bits!
             # The other 16 bits are LCO and Parity.
             # I will just fill it with dummy bits for now to pass the encoder test.
