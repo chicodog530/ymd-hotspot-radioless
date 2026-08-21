@@ -121,9 +121,9 @@
       source.connect(gainNode);
       gainNode.connect(audioCtx.destination); 
       
-      // Gapless playback scheduling with minimal 30ms jitter buffer
+      // Robust 250ms jitter buffer to completely absorb internet UDP packet arrival jitter
       if (nextAudioTime < audioCtx.currentTime) {
-          nextAudioTime = audioCtx.currentTime + 0.03; // 30ms buffer if underrun
+          nextAudioTime = audioCtx.currentTime + 0.25; // 250ms buffer to prevent under-runs
       }
       
       source.start(nextAudioTime);
