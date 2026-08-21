@@ -171,6 +171,7 @@ class AudioBridge:
                                 is_voice = (data[15] & 0x10) == 0x10
                                 
                                 if is_voice:
+                                    seq_no = data[4]
                                     import dmr_utils3.decode as dmr
                                     # The MMDVM Homebrew header is 20 bytes long. The 33-byte RF frame starts at byte 20.
                                     rf_frame = data[20:53]
@@ -192,7 +193,7 @@ class AudioBridge:
                                         all_pcm_floats.extend(pcm_floats)
                             
                             if all_pcm_floats:
-                                pcm_bytes = struct.pack(f"<{len(all_pcm_floats)}f", *all_pcm_floats)
+                                pcm_bytes = struct.pack(f"<I{len(all_pcm_floats)}f", seq_no, *all_pcm_floats)
                                 websockets.broadcast(self.connected_clients, pcm_bytes)
             if getattr(self, "is_receiving", False) and now - getattr(self, "last_voice", 0) > 1.5:
                 self.is_receiving = False
