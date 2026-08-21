@@ -121,9 +121,9 @@
       source.connect(gainNode);
       gainNode.connect(audioCtx.destination); 
       
-      // Gapless playback scheduling with 400ms jitter buffer for network stability
+      // Gapless playback scheduling with 150ms jitter buffer for network stability
       if (nextAudioTime < audioCtx.currentTime) {
-          nextAudioTime = audioCtx.currentTime + 0.4; // 400ms buffer if underrun
+          nextAudioTime = audioCtx.currentTime + 0.15; // 150ms buffer if underrun
       }
       
       source.start(nextAudioTime);

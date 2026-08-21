@@ -115,8 +115,14 @@ class AudioBridge:
         
         while True:
             now = asyncio.get_event_loop().time()
-            try:
-                data, addr = self.sock.recvfrom(2048)
+            
+            # Drain the entire UDP buffer
+            while True:
+                try:
+                    data, addr = self.sock.recvfrom(2048)
+                except BlockingIOError:
+                    break
+                    
                 if addr[0] == "127.0.0.1":
                     # From DMRGateway, forward to Brandmeister
                     self.dmrgw_addr = addr
@@ -187,9 +193,6 @@ class AudioBridge:
                             if all_pcm_floats:
                                 pcm_bytes = struct.pack(f"<{len(all_pcm_floats)}f", *all_pcm_floats)
                                 websockets.broadcast(self.connected_clients, pcm_bytes)
-            except BlockingIOError:
-                pass
-                
             if getattr(self, "is_receiving", False) and now - getattr(self, "last_voice", 0) > 1.5:
                 self.is_receiving = False
                 if self.connected_clients:
