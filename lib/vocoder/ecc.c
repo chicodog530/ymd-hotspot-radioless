@@ -17,6 +17,7 @@
 
 #include <math.h>
 #include "ecc_const.h"
+#include "mbelib.h"
 
 void
 mbe_checkGolayBlock (long int *block)
