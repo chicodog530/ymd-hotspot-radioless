@@ -71,36 +71,28 @@ class AudioBridge:
             self.bm_port = 62031
             
     def start_jvm(self):
-        if not JMBE_CLASSPATH:
-            logging.error("JMBE jars not found!")
-            sys.exit(1)
-            
-        logging.info("Starting JVM and loading JMBE...")
-        if not jpype.isJVMStarted():
-            jvm_path = "/usr/lib/jvm/java-21-openjdk-armhf/lib/client/libjvm.so"
-            jpype.startJVM(jvm_path, classpath=JMBE_CLASSPATH)
-            
+        # We replaced JMBE with the C vocoder for better stability and performance
         try:
-            JMBEAudioLibrary = jpype.JClass("jmbe.JMBEAudioLibrary")
-            self.jmbe_lib = JMBEAudioLibrary()
-            self.ambe_codec = self.jmbe_lib.getAudioConverter("AMBE 3600 x 2450")
-            logging.info("JMBE AMBE decoder initialized successfully.")
+            from vocoder import Vocoder
+            self.vocoder = Vocoder()
+            logging.info("C Vocoder initialized successfully for RX and TX.")
         except Exception as e:
-            logging.error(f"Failed to load JMBE classes: {e}")
+            logging.error(f"Failed to load C Vocoder: {e}")
             sys.exit(1)
 
     def decode_ambe_to_pcm(self, ambe_data):
-        if not self.ambe_codec: return None
+        if not getattr(self, 'vocoder', None): return None
         try:
             # We expect 27 bytes of ambe_data (3 frames of 9 bytes)
             all_pcm = []
             for i in range(0, len(ambe_data), 9):
                 frame = ambe_data[i:i+9]
                 if len(frame) == 9:
-                    java_bytes = jpype.JArray(jpype.JByte)(frame)
-                    pcm_floats = self.ambe_codec.getAudio(java_bytes)
-                    if pcm_floats:
-                        all_pcm.extend(list(pcm_floats))
+                    # decode_frame returns a list of int16
+                    pcm_ints = self.vocoder.decode_frame(frame)
+                    if pcm_ints:
+                        # Convert int16 to float32 [-1.0, 1.0] for the browser Web Audio API
+                        all_pcm.extend([x / 32768.0 for x in pcm_ints])
             return all_pcm
         except Exception as e:
             logging.error(f"Decode error: {e}")
