@@ -166,8 +166,8 @@ class AudioBridge:
                         elif data.startswith(b"DMRD") and len(data) >= 53:
                             try:
                                 # Byte 15 contains Slot (0x80), Private/Group (0x40), Data (0x20), and Voice (0x10)
-                                # A Voice burst has 0x10 set, and 0x20 clear (0x20 is used for headers/terminators)
-                                is_voice = (data[15] & 0x30) == 0x10
+                                # A Voice burst ALWAYS has 0x10 set. We shouldn't check 0x20 because some Voice Sync bursts might set it.
+                                is_voice = (data[15] & 0x10) == 0x10
                                 
                                 if is_voice:
                                     import dmr_utils3.decode as dmr
