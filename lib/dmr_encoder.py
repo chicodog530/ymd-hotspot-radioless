@@ -160,12 +160,14 @@ class DMREncoder:
         # Data Type flags and Stream ID generation
         if frame_type == 1: # Voice Header
             self.stream_id = self.random.randint(1, 0xfffffffe)
-            byte_15 |= (0x20 | 1) # DT_VOICE_LC_HEADER
+            byte_15 |= (0x20 | 1) # HBPF_DATA_SYNC + DT_VOICE_LC_HEADER
         elif frame_type == 2: # Terminator
-            byte_15 |= (0x20 | 2) # DT_TERMINATOR_WITH_LC
+            byte_15 |= (0x20 | 2) # HBPF_DATA_SYNC + DT_TERMINATOR_WITH_LC
         else: # Voice Bursts (A-F)
-            byte_15 |= 0x10 # DT_VOICE (0x10 is set for ALL voice bursts)
-            byte_15 |= burst_idx # Lower 4 bits are the sequence number (0-5)
+            if burst_idx == 0:
+                byte_15 |= 0x10  # HBPF_VOICE_SYNC (Burst A only)
+            # Bursts B-F: HBPF_VOICE (0x00) - no flag needed
+            byte_15 |= burst_idx # Lower 4 bits are the burst sequence (0-5)
                 
         stream_bytes = self.stream_id.to_bytes(4, 'big')
         
