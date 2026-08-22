@@ -104,98 +104,33 @@
     }
   }
   
-  let compressorNode;
-  let gainNode;
-  let jitterBuffer = [];
-  let expectedSeqNo = -1;
-
+  // Dead-simple audio playback. WebSocket is TCP = packets arrive in order.
+  // No jitter buffer, no sequence tracking, no sorting needed.
   function playAudio(pcmData) {
       if (!audioCtx) return;
       
-      // Setup Automatic Gain Control (AGC) and prevent clipping
-      if (!compressorNode) {
-          compressorNode = audioCtx.createDynamicsCompressor();
-          compressorNode.threshold.value = -50;
-          compressorNode.knee.value = 40;
-          compressorNode.ratio.value = 12;
-          compressorNode.attack.value = 0;
-          compressorNode.release.value = 0.25;
-          
-          gainNode = audioCtx.createGain();
-          gainNode.gain.value = 4.0; // Boost audio heavily into the compressor
-          
-          compressorNode.connect(gainNode);
-          gainNode.connect(audioCtx.destination);
+      const floatArr = new Float32Array(pcmData);
+      const buffer = audioCtx.createBuffer(1, floatArr.length, 8000);
+      buffer.copyToChannel(floatArr, 0);
+      
+      const source = audioCtx.createBufferSource();
+      source.buffer = buffer;
+      
+      // Simple gain node for volume (created once)
+      if (!window._rxGain) {
+          window._rxGain = audioCtx.createGain();
+          window._rxGain.gain.value = 3.0;
+          window._rxGain.connect(audioCtx.destination);
       }
+      source.connect(window._rxGain);
       
-      const dataView = new DataView(pcmData);
-      let seqNo = -1;
-      let floatArr;
-      
-      if (pcmData.byteLength === 1924) {
-          seqNo = dataView.getUint32(0, true);
-          floatArr = new Float32Array(pcmData, 4);
-      } else {
-          floatArr = new Float32Array(pcmData);
-      }
-      
-      jitterBuffer.push({ seqNo, floatArr });
-      
-      // Sort buffer by seqNo to handle UDP out-of-order delivery
-      if (seqNo !== -1) {
-          jitterBuffer.sort((a, b) => {
-              let diff = a.seqNo - b.seqNo;
-              if (diff > 128) diff -= 256;
-              if (diff < -128) diff += 256;
-              return diff;
-          });
-      }
-      
-      // Wait until we have a healthy buffer (6 packets = 360ms) before starting a burst
+      // Schedule: if we've fallen behind, jump ahead 300ms to rebuild buffer
       if (nextAudioTime < audioCtx.currentTime) {
-          if (jitterBuffer.length < 6) {
-              return; // Keep buffering
-          }
-          // Buffer is full, start playing in the near future
-          nextAudioTime = audioCtx.currentTime + 0.1;
-          expectedSeqNo = -1; 
+          nextAudioTime = audioCtx.currentTime + 0.3;
       }
       
-      // Schedule all packets that are in order
-      while (jitterBuffer.length > 0) {
-          // If we are tracking sequence numbers, handle missing packets
-          if (expectedSeqNo !== -1 && jitterBuffer[0].seqNo !== -1) {
-              let diff = jitterBuffer[0].seqNo - expectedSeqNo;
-              if (diff < 0) diff += 256;
-              
-              if (diff > 0 && diff < 10) {
-                  // We are missing packets! Wait for them to arrive out-of-order
-                  if (jitterBuffer.length < 12) {
-                      break; 
-                  } else {
-                      // Buffer is huge, missing packet is truly lost on the internet. Skip forward.
-                      expectedSeqNo = jitterBuffer[0].seqNo;
-                      nextAudioTime += diff * 0.06; // Add silence gap mathematically
-                  }
-              } else if (diff >= 10) {
-                   // Huge jump, must be a new transmission or massive drop. Reset.
-                   expectedSeqNo = jitterBuffer[0].seqNo;
-              }
-          }
-          
-          const packet = jitterBuffer.shift();
-          expectedSeqNo = (packet.seqNo + 1) % 256;
-          
-          const buffer = audioCtx.createBuffer(1, packet.floatArr.length, 8000);
-          buffer.copyToChannel(packet.floatArr, 0);
-          
-          const source = audioCtx.createBufferSource();
-          source.buffer = buffer;
-          source.connect(compressorNode);
-          
-          source.start(nextAudioTime);
-          nextAudioTime += buffer.duration;
-      }
+      source.start(nextAudioTime);
+      nextAudioTime += buffer.duration;
   }
 
   function disconnectAudio() {

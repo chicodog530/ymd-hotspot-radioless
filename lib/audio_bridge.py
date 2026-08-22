@@ -83,16 +83,15 @@ class AudioBridge:
     def decode_ambe_to_pcm(self, ambe_data):
         if not getattr(self, 'vocoder', None): return None
         try:
-            # We expect 27 bytes of ambe_data (3 frames of 9 bytes)
+            # ambe_data is 27 bytes = 3 frames of 9 bytes each
             all_pcm = []
             for i in range(0, len(ambe_data), 9):
                 frame = ambe_data[i:i+9]
                 if len(frame) == 9:
-                    # decode_frame returns a list of int16
                     pcm_ints = self.vocoder.decode_frame(frame)
                     if pcm_ints:
-                        # Convert int16 to float32 [-1.0, 1.0] for the browser Web Audio API
-                        all_pcm.extend([x / 32768.0 for x in pcm_ints])
+                        # Convert int16 to float32 [-1.0, 1.0] and apply 3x gain
+                        all_pcm.extend([min(1.0, max(-1.0, (x / 32768.0) * 3.0)) for x in pcm_ints])
             return all_pcm
         except Exception as e:
             logging.error(f"Decode error: {e}")
@@ -171,7 +170,6 @@ class AudioBridge:
                                 is_voice = (data[15] & 0x10) == 0x10
                                 
                                 if is_voice:
-                                    seq_no = data[4]
                                     import dmr_utils3.decode as dmr
                                     # The MMDVM Homebrew header is 20 bytes long. The 33-byte RF frame starts at byte 20.
                                     rf_frame = data[20:53]
@@ -183,17 +181,9 @@ class AudioBridge:
                                 logging.error(f"Error extracting AMBE from DMRD: {e}")
                                 
                         if ambe_data and self.connected_clients:
-                            # A DMR voice burst contains THREE 9-byte AMBE frames (60ms of audio total)
-                            all_pcm_floats = []
-                            for i in range(3):
-                                chunk = ambe_data[i*9 : (i+1)*9]
-                                if len(chunk) == 9:
-                                    pcm_floats = self.decode_ambe_to_pcm(chunk)
-                                    if pcm_floats:
-                                        all_pcm_floats.extend(pcm_floats)
-                            
-                            if all_pcm_floats:
-                                pcm_bytes = struct.pack(f"<I{len(all_pcm_floats)}f", seq_no, *all_pcm_floats)
+                            pcm_floats = self.decode_ambe_to_pcm(ambe_data)
+                            if pcm_floats:
+                                pcm_bytes = struct.pack(f"<{len(pcm_floats)}f", *pcm_floats)
                                 websockets.broadcast(self.connected_clients, pcm_bytes)
             if getattr(self, "is_receiving", False) and now - getattr(self, "last_voice", 0) > 1.5:
                 self.is_receiving = False
