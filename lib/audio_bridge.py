@@ -165,9 +165,17 @@ class AudioBridge:
                         # Handle BrandMeister MMDVM (DMRD) which is a 55-byte packet containing a 33-byte RF frame
                         elif data.startswith(b"DMRD") and len(data) >= 53:
                             try:
-                                # Byte 15 contains Slot (0x80), Private/Group (0x40), Data (0x20), and Voice (0x10).
-                                # For Voice bursts, bit 4 (0x10) is set, and the lower 4 bits are the burst index (0-5).
-                                is_voice = (data[15] & 0x10) == 0x10
+                                # Byte 15 flag layout (MMDVM Homebrew Protocol):
+                                #   Bit 7 (0x80) = Slot (0=TS1, 1=TS2)
+                                #   Bit 6 (0x40) = Call Type (0=Group, 1=Private)
+                                #   Bits 5-4 (0x30) = Frame Type:
+                                #     0x00 = HBPF_VOICE      (Bursts B,C,D,E,F)
+                                #     0x10 = HBPF_VOICE_SYNC (Burst A only)
+                                #     0x20 = HBPF_DATA_SYNC  (Voice Header, Terminator, CSBK)
+                                #   Bits 3-0 (0x0F) = Burst sequence (0-5) for voice, or data type for data
+                                #
+                                # Voice = any burst where Data Sync (0x20) is NOT set
+                                is_voice = (data[15] & 0x20) == 0
                                 
                                 if is_voice:
                                     import dmr_utils3.decode as dmr
