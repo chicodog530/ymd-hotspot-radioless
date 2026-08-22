@@ -107,7 +107,6 @@
   let compressorNode;
   let gainNode;
   let jitterBuffer = [];
-  let nextAudioTime = 0;
   let expectedSeqNo = -1;
 
   function playAudio(pcmData) {
