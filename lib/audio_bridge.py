@@ -134,12 +134,17 @@ class AudioBridge:
                     if self.dmrgw_addr:
                         self.sock.sendto(data, self.dmrgw_addr)
                         
-                    # Log packet signature for debugging
+                    # Log ALL incoming packets for debugging
                     if len(data) >= 4 and not data.startswith(b"DMRP"):
-                        if data.startswith(b"DMRD") and not getattr(self, "logged_dmrd", False):
-                            self.dmrd_log_count = getattr(self, "dmrd_log_count", 0) + 1
-                            logging.info(f"DMRD HEX DUMP [{self.dmrd_log_count}]: {data.hex()}")
-                            if self.dmrd_log_count >= 5: self.logged_dmrd = True
+                        if data.startswith(b"DMRD"):
+                            self.rx_dmrd_count = getattr(self, "rx_dmrd_count", 0) + 1
+                            b15 = data[15] if len(data) > 15 else 0
+                            frame_type = (b15 & 0x30) >> 4
+                            ft_names = {0: "VOICE", 1: "VOICE_SYNC", 2: "DATA_SYNC", 3: "RESERVED"}
+                            is_voice = (b15 & 0x20) == 0
+                            src_id = int.from_bytes(data[5:8], 'big') if len(data) >= 8 else 0
+                            dst_id = int.from_bytes(data[8:11], 'big') if len(data) >= 11 else 0
+                            logging.info(f"RX DMRD #{self.rx_dmrd_count}: src={src_id} dst={dst_id} byte15=0x{b15:02x} frame={ft_names.get(frame_type,'?')} is_voice={is_voice}")
                         elif not data.startswith(b"DMRD"):
                             logging.info(f"BM Packet: {data[:4]} len={len(data)}")
                     
